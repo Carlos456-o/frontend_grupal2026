@@ -225,6 +225,6 @@ export default function App() {
 }
 
 const estilos = StyleSheet.create({
-  contenedor: { flex: 1, backgroundColor: colores.fondo },
+  contenedor: { marginTop: 45, flex: 2, backgroundColor: colores.fondo },
   contenido: { flex: 1 },
 });
