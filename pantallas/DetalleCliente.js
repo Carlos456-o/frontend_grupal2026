@@ -1,41 +1,52 @@
 // PANTALLA: Detalle de un cliente (admin)
-// "parametros.clienteId" nos dice qué cliente mostrar.
+// "parametros.clienteId" nos dice qué cliente mostrar. Sus datos y su
+// historial de citas vienen de Firebase.
 
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { clientes } from '../datos/clientes';
-import { citas } from '../datos/citas';
+import { obtenerCliente } from '../firebase/clientes';
+import { obtenerCitasDeCliente } from '../firebase/citas';
+import { useDatos } from '../firebase/utilidades';
 import Encabezado from '../componentes/Encabezado';
 import Tarjeta from '../componentes/Tarjeta';
 import TarjetaVehiculo from '../componentes/TarjetaVehiculo';
 import TarjetaCita from '../componentes/TarjetaCita';
 import SinResultados from '../componentes/SinResultados';
+import Cargando from '../componentes/Cargando';
 import Boton from '../componentes/Boton';
 import { colores } from '../estilos/colores';
 
-export default function DetalleCliente({ parametros, navegarA }) {
-  const cliente = clientes.find((c) => c.id === parametros.clienteId);
-  const historial = citas.filter((c) => c.clienteId === parametros.clienteId);
+async function cargarCliente(clienteId) {
+  const [cliente, historial] = await Promise.all([obtenerCliente(clienteId), obtenerCitasDeCliente(clienteId)]);
+  return { cliente, historial };
+}
 
+export default function DetalleCliente({ parametros, navegarA }) {
+  const { datos, cargando, error, recargar } = useDatos(() => cargarCliente(parametros.clienteId), [parametros.clienteId]);
+
+  if (cargando || error) return <Cargando error={error} alReintentar={recargar} />;
+  const { cliente, historial } = datos;
   if (!cliente) return <SinResultados texto="Cliente no encontrado" />;
 
   return (
     <ScrollView style={estilos.contenedor}>
-      <Encabezado titulo={cliente.nombre} subtitulo={cliente.telefono} />
+      <Encabezado titulo={cliente.nombre} subtitulo={cliente.telefono} alVolver={() => navegarA('adminClientes')} />
 
       <View style={estilos.seccion}>
         <Tarjeta>
           <Text style={estilos.etiqueta}>Correo</Text>
-          <Text style={estilos.valor}>{cliente.correo}</Text>
+          <Text style={estilos.valor}>{cliente.correo || '—'}</Text>
           <Text style={estilos.etiqueta}>Cliente desde</Text>
-          <Text style={estilos.valor}>{cliente.fechaRegistro}</Text>
+          <Text style={estilos.valor}>{cliente.fechaRegistro || '—'}</Text>
         </Tarjeta>
       </View>
 
       <View style={estilos.seccion}>
         <Text style={estilos.tituloSeccion}>Vehículos</Text>
-        {cliente.vehiculos.map((v) => (
-          <TarjetaVehiculo key={v.placa} vehiculo={v} />
-        ))}
+        {cliente.vehiculos.length === 0 ? (
+          <SinResultados texto="Sin vehículos registrados" />
+        ) : (
+          cliente.vehiculos.map((v) => <TarjetaVehiculo key={v.placa} vehiculo={v} />)
+        )}
       </View>
 
       <View style={estilos.seccion}>
@@ -43,7 +54,9 @@ export default function DetalleCliente({ parametros, navegarA }) {
         {historial.length === 0 ? (
           <SinResultados texto="Sin citas registradas" />
         ) : (
-          historial.map((c) => <TarjetaCita key={c.id} cita={c} alPresionar={() => {}} />)
+          historial.map((c) => (
+            <TarjetaCita key={c.id} cita={c} alPresionar={() => navegarA('adminSeguimientoLavado', { citaId: c.id })} />
+          ))
         )}
       </View>
 

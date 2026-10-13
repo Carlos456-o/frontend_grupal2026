@@ -1,18 +1,23 @@
 // PANTALLA: Gestión de clientes (admin)
-// Lista de clientes con buscador. Cada tarjeta muestra sus vehículos como
-// etiquetas pequeñas. Tocar una tarjeta lleva al detalle del cliente.
+// Lista de clientes (colección "clientes" de Firebase) con buscador. Cada
+// tarjeta muestra sus vehículos como etiquetas pequeñas. Tocar una tarjeta
+// lleva al detalle del cliente.
 
 import { useState } from 'react';
 import { View, Text, TextInput, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { clientes } from '../datos/clientes';
+import { obtenerClientes } from '../firebase/clientes';
+import { useDatos } from '../firebase/utilidades';
 import Encabezado from '../componentes/Encabezado';
 import Tarjeta from '../componentes/Tarjeta';
 import SinResultados from '../componentes/SinResultados';
-import { colores } from '../estilos/colores';
+import Cargando from '../componentes/Cargando';
+import { colores, colorAvatar } from '../estilos/colores';
 
 export default function ListaClientes({ navegarA }) {
   const [busqueda, setBusqueda] = useState('');
+  const { datos, cargando, error, recargar } = useDatos(obtenerClientes);
+  const clientes = datos ?? [];
 
   const clientesFiltrados = clientes.filter(
     (c) => c.nombre.toLowerCase().includes(busqueda.toLowerCase()) || c.telefono.includes(busqueda)
@@ -38,7 +43,9 @@ export default function ListaClientes({ navegarA }) {
       </View>
 
       <ScrollView contentContainerStyle={estilos.lista}>
-        {clientesFiltrados.length === 0 ? (
+        {cargando || error ? (
+          <Cargando error={error} alReintentar={recargar} />
+        ) : clientesFiltrados.length === 0 ? (
           <SinResultados texto="No se encontraron clientes" />
         ) : (
           clientesFiltrados.map((cliente) => {
@@ -52,7 +59,7 @@ export default function ListaClientes({ navegarA }) {
             return (
               <Pressable key={cliente.id} onPress={() => navegarA('adminDetalleCliente', { clienteId: cliente.id })}>
                 <Tarjeta estilo={estilos.fila}>
-                  <View style={[estilos.avatar, { backgroundColor: cliente.color }]}>
+                  <View style={[estilos.avatar, { backgroundColor: colorAvatar(cliente.id) }]}>
                     <Text style={estilos.textoAvatar}>{iniciales}</Text>
                   </View>
                   <View style={{ flex: 1, marginLeft: 12 }}>

@@ -1,22 +1,14 @@
 // Muestra el estado de una cita como una pequeña etiqueta de color
-// (ej: "Pendiente" en amarillo, "Completada" en verde).
+// (ej: "Pendiente" en amarillo, "Terminado" en verde).
 
 import { View, Text, StyleSheet } from 'react-native';
-import { coloresPorEstado } from '../estilos/colores';
-
-const NOMBRES_ESTADO = {
-  pendiente: 'Pendiente',
-  confirmada: 'Confirmada',
-  en_proceso: 'En proceso',
-  completada: 'Completada',
-  cancelada: 'Cancelada',
-};
+import { coloresPorEstado, nombresEstado } from '../estilos/colores';
 
 export default function InsigniaEstado({ estado }) {
   const color = coloresPorEstado[estado] || coloresPorEstado.pendiente;
   return (
     <View style={[estilos.caja, { backgroundColor: color.fondo }]}>
-      <Text style={[estilos.texto, { color: color.texto }]}>{NOMBRES_ESTADO[estado] || estado}</Text>
+      <Text style={[estilos.texto, { color: color.texto }]}>{nombresEstado[estado] || estado}</Text>
     </View>
   );
 }

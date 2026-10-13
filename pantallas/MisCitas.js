@@ -1,25 +1,20 @@
 // PANTALLA: Mis citas (cliente)
 // Tiene dos pestañas: "Próximas" (pendiente/confirmada/en_proceso) e
-// "Historial" (completada/cancelada). Cada tarjeta muestra botones
-// distintos según el estado de la cita.
+// "Historial" (terminado/cancelada). Cada tarjeta muestra botones
+// distintos según el estado de la cita. Las citas vienen de Firebase.
 
 import { useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { citas } from '../datos/citas';
+import { obtenerCitasDeCliente, cambiarEstadoCita } from '../firebase/citas';
+import { useDatos } from '../firebase/utilidades';
 import Encabezado from '../componentes/Encabezado';
 import Tarjeta from '../componentes/Tarjeta';
 import Boton from '../componentes/Boton';
 import SinResultados from '../componentes/SinResultados';
-import { colores, coloresPorEstado } from '../estilos/colores';
+import Cargando from '../componentes/Cargando';
+import { colores, coloresPorEstado, nombresEstado } from '../estilos/colores';
 
-const NOMBRES_ESTADO = {
-  pendiente: 'Pendiente',
-  confirmada: 'Confirmada',
-  en_proceso: 'En proceso',
-  completada: 'Completada',
-  cancelada: 'Cancelada',
-};
 const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const MESES_ABREV = ['ene.', 'feb.', 'mar.', 'abr.', 'may.', 'jun.', 'jul.', 'ago.', 'sept.', 'oct.', 'nov.', 'dic.'];
 
@@ -31,23 +26,30 @@ function formatearFecha(fechaISO) {
 export default function MisCitas({ usuario, navegarA }) {
   const [pestana, setPestana] = useState('proximas'); // "proximas" o "historial"
 
-  const misCitas = citas.filter((c) => c.clienteId === usuario.perfil.id);
-  const citasMostradas = misCitas
-    .filter((c) =>
-      pestana === 'proximas'
-        ? ['pendiente', 'confirmada', 'en_proceso'].includes(c.estado)
-        : ['completada', 'cancelada'].includes(c.estado)
-    )
-    .sort((a, b) => (a.fecha + a.hora < b.fecha + b.hora ? 1 : -1));
+  const { datos: misCitas, cargando, error, recargar } = useDatos(
+    () => obtenerCitasDeCliente(usuario.perfil.id),
+    [usuario.perfil.id]
+  );
+  const citasMostradas = (misCitas ?? []).filter((c) =>
+    pestana === 'proximas'
+      ? ['pendiente', 'confirmada', 'en_proceso'].includes(c.estado)
+      : ['terminado', 'cancelada'].includes(c.estado)
+  );
 
-  function alCancelar() {
+  function alCancelar(cita) {
     Alert.alert('Cancelar cita', '¿Seguro que deseas cancelar esta cita?', [
       { text: 'No', style: 'cancel' },
       {
         text: 'Sí, cancelar',
         style: 'destructive',
-        // Todavía no hay backend, así que solo avisamos (no se guarda el cambio).
-        onPress: () => Alert.alert('Cita cancelada'),
+        onPress: async () => {
+          try {
+            await cambiarEstadoCita(cita.id, 'cancelada');
+            recargar();
+          } catch (e) {
+            Alert.alert('Error', 'No se pudo cancelar la cita. Intenta de nuevo.');
+          }
+        },
       },
     ]);
   }
@@ -76,17 +78,19 @@ export default function MisCitas({ usuario, navegarA }) {
       </View>
 
       <ScrollView contentContainerStyle={estilos.lista}>
-        {citasMostradas.length === 0 ? (
+        {cargando || error ? (
+          <Cargando error={error} alReintentar={recargar} />
+        ) : citasMostradas.length === 0 ? (
           <SinResultados texto={pestana === 'proximas' ? 'No tienes citas próximas' : 'Aún no tienes historial'} />
         ) : (
           citasMostradas.map((cita) => {
-            const color = coloresPorEstado[cita.estado];
+            const color = coloresPorEstado[cita.estado] ?? coloresPorEstado.pendiente;
             return (
               <Tarjeta key={cita.id} estilo={estilos.tarjetaCita}>
                 <View style={estilos.filaTitulo}>
                   <Text style={estilos.nombreServicio}>{cita.servicio.nombre}</Text>
                   <View style={[estilos.insigniaEstado, { backgroundColor: color.fondo }]}>
-                    <Text style={[estilos.textoInsignia, { color: color.texto }]}>{NOMBRES_ESTADO[cita.estado]}</Text>
+                    <Text style={[estilos.textoInsignia, { color: color.texto }]}>{nombresEstado[cita.estado] ?? cita.estado}</Text>
                   </View>
                 </View>
                 <Text style={estilos.fechaHora}>
@@ -103,7 +107,7 @@ export default function MisCitas({ usuario, navegarA }) {
                   cita.estado === 'pendiente' ? (
                     <View style={estilos.filaBotones}>
                       <Boton texto="Reprogramar" tipo="borde" alPresionar={alReprogramar} estilo={estilos.botonMitad} />
-                      <Boton texto="Cancelar" tipo="peligro" alPresionar={alCancelar} estilo={estilos.botonMitad} />
+                      <Boton texto="Cancelar" tipo="peligro" alPresionar={() => alCancelar(cita)} estilo={estilos.botonMitad} />
                     </View>
                   ) : (
                     <Boton

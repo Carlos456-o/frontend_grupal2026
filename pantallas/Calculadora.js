@@ -1,38 +1,29 @@
 // PANTALLA: Calcula tu lavado
-// Primer paso para agendar una cita: el cliente elige un paquete (uno de
-// los servicios de la categoría "Lavados") y puede agregar extras opcionales.
-// Al final, el botón de abajo ("Total a pagar") lleva a la pantalla
-// "Agendar cita" (AgendarCita.js) llevando el paquete y los extras elegidos.
+// Primer paso para agendar una cita: el cliente elige un servicio del
+// catálogo de Firebase. El botón de abajo ("Total a pagar") lleva a la
+// pantalla "Agendar cita" (AgendarCita.js) con el servicio elegido.
 
 import { useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { servicios } from '../datos/servicios';
-import { extras } from '../datos/extras';
+import { obtenerCatalogo } from '../firebase/servicios';
+import { useDatos } from '../firebase/utilidades';
 import Tarjeta from '../componentes/Tarjeta';
+import Cargando from '../componentes/Cargando';
 import { colores } from '../estilos/colores';
 
-const paquetes = servicios.filter((s) => s.categoriaId === 'cat1'); // solo "Lavados"
-const paqueteDestacado = paquetes.find((p) => p.destacado) || paquetes[0];
+export default function Calculadora({ parametros, navegarA }) {
+  const { datos, cargando, error, recargar } = useDatos(obtenerCatalogo);
+  const paquetes = datos ?? [];
+  // Si volvemos desde "Agendar cita" con "Cambiar", mantenemos el servicio elegido.
+  const [paqueteId, setPaqueteId] = useState(parametros?.servicioId ?? null);
 
-export default function Calculadora({ navegarA }) {
-  const [paqueteId, setPaqueteId] = useState(paqueteDestacado.id);
-  const [extrasElegidos, setExtrasElegidos] = useState(['ext1']); // Perfume viene elegido por defecto
-
-  const paquete = paquetes.find((p) => p.id === paqueteId);
-  const totalExtras = extras
-    .filter((e) => extrasElegidos.includes(e.id))
-    .reduce((suma, e) => suma + e.precio, 0);
-  const total = paquete.precio + totalExtras;
-
-  function alternarExtra(id) {
-    setExtrasElegidos((anteriores) =>
-      anteriores.includes(id) ? anteriores.filter((e) => e !== id) : [...anteriores, id]
-    );
-  }
+  const paquete = paquetes.find((p) => p.id === paqueteId) ?? paquetes[0];
+  const total = paquete?.precio ?? 0;
 
   function alContinuar() {
-    navegarA('clienteAgendarCita', { servicioId: paqueteId, extraIds: extrasElegidos });
+    if (!paquete) return;
+    navegarA('clienteAgendarCita', { servicio: paquete });
   }
 
   return (
@@ -43,30 +34,27 @@ export default function Calculadora({ navegarA }) {
         </Pressable>
         <View>
           <Text style={estilos.titulo}>Calcula tu lavado</Text>
-          <Text style={estilos.subtitulo}>Elige un paquete y agrega extras</Text>
+          <Text style={estilos.subtitulo}>Elige el servicio que quieres</Text>
         </View>
       </View>
 
       <ScrollView style={estilos.contenido} contentContainerStyle={estilos.contenidoInterno}>
-        <Text style={estilos.tituloSeccion}>1. Elige tu paquete</Text>
+        <Text style={estilos.tituloSeccion}>Elige tu servicio</Text>
+        {cargando || error ? <Cargando error={error} alReintentar={recargar} /> : null}
         {paquetes.map((p) => {
-          const seleccionado = p.id === paqueteId;
+          const seleccionado = p.id === paquete?.id;
           return (
-            <View key={p.id}>
-              {p.destacado ? (
-                <View style={estilos.insignia}>
-                  <Text style={estilos.textoInsignia}>KIT COMPLETO · MÁS ELEGIDO</Text>
-                </View>
-              ) : null}
+            <View key={p.catalogoId}>
               <Pressable onPress={() => setPaqueteId(p.id)}>
                 <Tarjeta estilo={[estilos.filaPaquete, seleccionado && estilos.paqueteSeleccionado]}>
-                  <View style={[estilos.iconoCuadro, { backgroundColor: p.colorFondoIcono }]}>
-                    <Ionicons name={p.icono} size={20} color={p.colorIcono} />
+                  <View style={[estilos.iconoCuadro, { backgroundColor: colores.fondoTab }]}>
+                    <Ionicons name="car-outline" size={20} color={colores.principal} />
                   </View>
                   <View style={estilos.textosPaquete}>
                     <Text style={estilos.nombrePaquete}>{p.nombre}</Text>
                     <Text style={estilos.descripcionPaquete}>
-                      {p.descripcion} · {p.duracionMinutos} min
+                      {p.descripcion}
+                      {p.duracionMinutos != null ? ` · ${p.duracionMinutos} min` : ''}
                     </Text>
                   </View>
                   <Text style={estilos.precioPaquete}>C${p.precio}</Text>
@@ -78,23 +66,6 @@ export default function Calculadora({ navegarA }) {
             </View>
           );
         })}
-
-        <Text style={[estilos.tituloSeccion, { marginTop: 8 }]}>2. Agrega extras (opcional)</Text>
-        <View style={estilos.filaExtras}>
-          {extras.map((extra) => {
-            const elegido = extrasElegidos.includes(extra.id);
-            return (
-              <Pressable key={extra.id} onPress={() => alternarExtra(extra.id)} style={[estilos.chipExtra, elegido && estilos.chipExtraElegido]}>
-                <Text style={[estilos.textoChipExtra, elegido && estilos.textoChipExtraElegido]}>
-                  + {extra.nombre}
-                </Text>
-                <Text style={[estilos.precioChipExtra, elegido && estilos.precioChipExtraElegido]}>
-                  +C${extra.precio}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
       </ScrollView>
 
       <Pressable onPress={alContinuar} style={estilos.barraTotal}>
@@ -133,17 +104,6 @@ const estilos = StyleSheet.create({
     marginBottom: 10,
   },
 
-  insignia: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#7c3aed',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    marginBottom: 6,
-    marginLeft: 4,
-  },
-  textoInsignia: { color: '#ffffff', fontSize: 9, fontWeight: '700' },
-
   filaPaquete: { flexDirection: 'row', alignItems: 'center' },
   paqueteSeleccionado: { borderColor: '#7c3aed', borderWidth: 2, backgroundColor: '#f5f3ff' },
   iconoCuadro: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
@@ -161,20 +121,6 @@ const estilos = StyleSheet.create({
     justifyContent: 'center',
   },
   radioSeleccionado: { backgroundColor: '#7c3aed', borderColor: '#7c3aed' },
-
-  filaExtras: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chipExtra: {
-    borderWidth: 1,
-    borderColor: colores.borde,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  chipExtraElegido: { borderColor: '#f97316', backgroundColor: '#fff7ed' },
-  textoChipExtra: { fontSize: 13, fontWeight: '600', color: colores.texto },
-  textoChipExtraElegido: { color: '#c2410c' },
-  precioChipExtra: { fontSize: 11, color: colores.textoSuave, marginTop: 2 },
-  precioChipExtraElegido: { color: '#c2410c', textDecorationLine: 'line-through' },
 
   barraTotal: {
     flexDirection: 'row',

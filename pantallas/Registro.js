@@ -5,12 +5,13 @@
 //   Paso 2: vehículo (opcional) + contraseña
 //
 // Usamos una variable de estado "paso" (1 o 2) para saber cuál de los
-// dos bloques mostrar. Por ahora NO se guarda el usuario de verdad
-// (no hay backend todavía), solo se muestra un mensaje al final.
+// dos bloques mostrar. Al final se guarda el cliente en la colección
+// "clientes" y su cuenta en "usuarios" de Firebase.
 
 import { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, Alert, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { registrarCliente, telefonoRegistrado } from '../firebase/usuarios';
 import CampoTexto from '../componentes/CampoTexto';
 import Boton from '../componentes/Boton';
 import { colores, degradados } from '../estilos/colores';
@@ -28,6 +29,7 @@ export default function Registro({ navegarA }) {
   const [modelo, setModelo] = useState('');
   const [contrasena, setContrasena] = useState('');
   const [confirmarContrasena, setConfirmarContrasena] = useState('');
+  const [guardando, setGuardando] = useState(false);
 
   function alPresionarAtras() {
     if (paso === 2) setPaso(1);
@@ -42,7 +44,8 @@ export default function Registro({ navegarA }) {
     setPaso(2);
   }
 
-  function alPresionarCrearCuenta() {
+  async function alPresionarCrearCuenta() {
+    if (guardando) return;
     if (!contrasena || contrasena.length < 4) {
       Alert.alert('Contraseña muy corta', 'Usa al menos 4 caracteres.');
       return;
@@ -51,9 +54,31 @@ export default function Registro({ navegarA }) {
       Alert.alert('Las contraseñas no coinciden', 'Revisa que sean iguales.');
       return;
     }
-    // Aquí, cuando tengamos un backend real, mandaríamos estos datos
-    // para guardar un nuevo "usuario" y un nuevo "cliente" (con su
-    // vehículo si lo llenó).
+    if ((placa.trim() && !modelo.trim()) || (!placa.trim() && modelo.trim())) {
+      Alert.alert('Vehículo incompleto', 'Escribe la placa y el modelo, o deja los dos vacíos.');
+      return;
+    }
+
+    setGuardando(true);
+    try {
+      if (await telefonoRegistrado(telefono.trim())) {
+        setGuardando(false);
+        Alert.alert('Teléfono en uso', 'Ya existe una cuenta con ese teléfono. Inicia sesión.');
+        return;
+      }
+      await registrarCliente({
+        nombre: nombre.trim(),
+        telefono: telefono.trim(),
+        correo: correo.trim(),
+        vehiculo: placa.trim() ? { placa: placa.trim().toUpperCase(), modelo: modelo.trim() } : null,
+        contrasena,
+      });
+    } catch (e) {
+      setGuardando(false);
+      Alert.alert('Error', 'No se pudo crear la cuenta. Intenta de nuevo.');
+      return;
+    }
+
     Alert.alert('Cuenta creada', 'Ya puedes iniciar sesión con tus datos.', [
       { text: 'OK', onPress: () => navegarA('iniciarSesion') },
     ]);
@@ -148,7 +173,7 @@ export default function Registro({ navegarA }) {
             ) : null}
 
             <Boton
-              texto="Crear mi cuenta"
+              texto={guardando ? 'Creando cuenta...' : 'Crear mi cuenta'}
               tipo="degradado"
               colorDegradado={degradados.registro}
               alPresionar={alPresionarCrearCuenta}

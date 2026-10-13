@@ -1,53 +1,81 @@
-// PANTALLA: Citas de hoy (admin)
-// Le muestra al administrador todas las citas del día, de todos los
-// clientes y empleados, con filtros por estado. Tocar una cita lleva
-// al "Seguimiento del lavado" para ver/actualizar sus pasos.
+// PANTALLA: Citas (admin)
+// Le muestra al administrador las citas de Firebase, de todos los clientes
+// y empleados: las de hoy o todas, con filtros por estado. Tocar una cita
+// lleva al "Seguimiento del lavado" para ver/actualizar sus pasos.
 
 import { useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { citas } from '../datos/citas';
-import { clientes } from '../datos/clientes';
+import { obtenerCitas } from '../firebase/citas';
+import { obtenerClientes } from '../firebase/clientes';
+import { useDatos, hoyISO } from '../firebase/utilidades';
 import SinResultados from '../componentes/SinResultados';
-import { colores, coloresPorEstado } from '../estilos/colores';
+import Cargando from '../componentes/Cargando';
+import { colores, coloresPorEstado, nombresEstado, colorAvatar } from '../estilos/colores';
 
-const NOMBRES_ESTADO = { pendiente: 'Pendiente', en_proceso: 'En proceso', completada: 'Completada', confirmada: 'Confirmada', cancelada: 'Cancelada' };
+const RANGOS = [
+  { clave: 'hoy', texto: 'Hoy' },
+  { clave: 'todas', texto: 'Todas las fechas' },
+];
 
 const FILTROS = [
   { clave: 'todas', texto: 'Todas' },
+  { clave: 'pendiente', texto: 'Pendientes' },
   { clave: 'en_proceso', texto: 'En proceso' },
-  { clave: 'completada', texto: 'Completadas' },
+  { clave: 'terminado', texto: 'Terminadas' },
 ];
 
+async function cargarCitasYClientes() {
+  const [citas, clientes] = await Promise.all([obtenerCitas(), obtenerClientes()]);
+  return { citas, clientes };
+}
+
 export default function CitasDeHoy({ navegarA }) {
+  const [rango, setRango] = useState('hoy');
   const [filtro, setFiltro] = useState('todas');
+  const { datos, cargando, error, recargar } = useDatos(cargarCitasYClientes);
+  const clientes = datos?.clientes ?? [];
 
-  const hoyISO = new Date().toISOString().slice(0, 10);
-  const citasHoy = citas
-    .filter((c) => c.fecha === hoyISO)
-    .sort((a, b) => (a.hora > b.hora ? 1 : -1));
+  const hoy = hoyISO();
+  const citasDelRango = (datos?.citas ?? [])
+    .filter((c) => rango === 'todas' || c.fecha === hoy)
+    // Hoy: por hora. Todas: las más recientes primero (ya vienen así).
+    .sort((a, b) => (rango === 'hoy' ? (a.hora > b.hora ? 1 : -1) : 0));
 
-  const completadas = citasHoy.filter((c) => c.estado === 'completada').length;
-  const pendientes = citasHoy.filter((c) => c.estado === 'pendiente' || c.estado === 'confirmada').length;
+  const terminadas = citasDelRango.filter((c) => c.estado === 'terminado').length;
+  const pendientes = citasDelRango.filter((c) => c.estado === 'pendiente' || c.estado === 'confirmada').length;
 
-  const citasFiltradas = citasHoy.filter((c) => filtro === 'todas' || c.estado === filtro);
+  const citasFiltradas = citasDelRango.filter(
+    (c) => filtro === 'todas' || c.estado === filtro || (filtro === 'pendiente' && c.estado === 'confirmada')
+  );
 
   return (
     <View style={estilos.contenedor}>
       <View style={estilos.encabezado}>
         <Text style={estilos.marca}>PANEL DEL NEGOCIO</Text>
-        <Text style={estilos.titulo}>Citas de hoy</Text>
+        <Text style={estilos.titulo}>{rango === 'hoy' ? 'Citas de hoy' : 'Todas las citas'}</Text>
       </View>
 
       <View style={estilos.seccion}>
+        <View style={[estilos.filaChips, { marginBottom: 12 }]}>
+          {RANGOS.map((r) => (
+            <Pressable
+              key={r.clave}
+              onPress={() => setRango(r.clave)}
+              style={[estilos.chip, rango === r.clave && estilos.chipActivo]}
+            >
+              <Text style={[estilos.textoChip, rango === r.clave && estilos.textoChipActivo]}>{r.texto}</Text>
+            </Pressable>
+          ))}
+        </View>
+
         <View style={estilos.filaStats}>
           <View style={estilos.stat}>
-            <Text style={estilos.statValor}>{citasHoy.length}</Text>
-            <Text style={estilos.statEtiqueta}>Citas hoy</Text>
+            <Text style={estilos.statValor}>{citasDelRango.length}</Text>
+            <Text style={estilos.statEtiqueta}>Citas</Text>
           </View>
           <View style={estilos.stat}>
-            <Text style={[estilos.statValor, { color: colores.exito }]}>{completadas}</Text>
-            <Text style={estilos.statEtiqueta}>Completadas</Text>
+            <Text style={[estilos.statValor, { color: colores.exito }]}>{terminadas}</Text>
+            <Text style={estilos.statEtiqueta}>Terminadas</Text>
           </View>
           <View style={estilos.stat}>
             <Text style={[estilos.statValor, { color: '#d97706' }]}>{pendientes}</Text>
@@ -55,7 +83,7 @@ export default function CitasDeHoy({ navegarA }) {
           </View>
         </View>
 
-        <View style={estilos.filaChips}>
+        <View style={[estilos.filaChips, { flexWrap: 'wrap' }]}>
           {FILTROS.map((f) => (
             <Pressable
               key={f.clave}
@@ -69,12 +97,14 @@ export default function CitasDeHoy({ navegarA }) {
       </View>
 
       <ScrollView contentContainerStyle={estilos.lista}>
-        {citasFiltradas.length === 0 ? (
+        {cargando || error ? (
+          <Cargando error={error} alReintentar={recargar} />
+        ) : citasFiltradas.length === 0 ? (
           <SinResultados texto="No hay citas con ese filtro" />
         ) : (
           citasFiltradas.map((cita) => {
             const cliente = clientes.find((c) => c.id === cita.clienteId);
-            const color = coloresPorEstado[cita.estado];
+            const color = coloresPorEstado[cita.estado] ?? coloresPorEstado.pendiente;
             const iniciales = (cliente?.nombre || '')
               .split(' ')
               .map((p) => p[0])
@@ -88,18 +118,21 @@ export default function CitasDeHoy({ navegarA }) {
                 style={estilos.filaCita}
                 onPress={() => navegarA('adminSeguimientoLavado', { citaId: cita.id })}
               >
-                <Text style={estilos.hora}>{cita.hora}</Text>
-                <View style={estilos.avatarChico}>
+                <View style={estilos.columnaHora}>
+                  <Text style={estilos.hora}>{cita.hora}</Text>
+                  {rango === 'todas' ? <Text style={estilos.fecha}>{cita.fecha.slice(5)}</Text> : null}
+                </View>
+                <View style={[estilos.avatarChico, { backgroundColor: colorAvatar(cita.clienteId) }]}>
                   <Text style={estilos.textoAvatarChico}>{iniciales}</Text>
                 </View>
                 <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={estilos.nombreCliente}>{cliente?.nombre}</Text>
+                  <Text style={estilos.nombreCliente}>{cliente?.nombre || 'Cliente no encontrado'}</Text>
                   <Text style={estilos.detalleCita}>
                     {cita.servicio.nombre} · {cita.vehiculo.placa}
                   </Text>
                 </View>
                 <View style={[estilos.insigniaEstado, { backgroundColor: color.fondo }]}>
-                  <Text style={[estilos.textoInsignia, { color: color.texto }]}>{NOMBRES_ESTADO[cita.estado]}</Text>
+                  <Text style={[estilos.textoInsignia, { color: color.texto }]}>{nombresEstado[cita.estado] ?? cita.estado}</Text>
                 </View>
               </Pressable>
             );
@@ -155,12 +188,13 @@ const estilos = StyleSheet.create({
     padding: 12,
     marginBottom: 10,
   },
-  hora: { fontSize: 13, fontWeight: '700', color: colores.texto, width: 52 },
+  columnaHora: { width: 52 },
+  hora: { fontSize: 13, fontWeight: '700', color: colores.texto },
+  fecha: { fontSize: 10, color: colores.textoSuave, marginTop: 2 },
   avatarChico: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#7c3aed',
     alignItems: 'center',
     justifyContent: 'center',
   },

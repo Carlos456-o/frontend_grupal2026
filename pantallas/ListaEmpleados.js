@@ -1,25 +1,31 @@
 // PANTALLA: Gestión de empleados (admin)
-// Lista de empleados con buscador, insignia de rol y botón para editar.
-// El botón de abajo lleva al formulario de "Nuevo empleado".
+// Lista de empleados (colección "empleados" de Firebase) con buscador e
+// insignia de rol. El botón de abajo lleva al formulario de "Nuevo empleado".
 
 import { useState } from 'react';
-import { View, Text, TextInput, ScrollView, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { empleados } from '../datos/empleados';
+import { obtenerEmpleados } from '../firebase/empleados';
+import { useDatos } from '../firebase/utilidades';
 import Encabezado from '../componentes/Encabezado';
 import Tarjeta from '../componentes/Tarjeta';
 import Boton from '../componentes/Boton';
 import SinResultados from '../componentes/SinResultados';
-import { colores } from '../estilos/colores';
+import Cargando from '../componentes/Cargando';
+import { colores, colorAvatar } from '../estilos/colores';
 
-const INSIGNIA_ROL = {
+// Los mismos roles que hay en Firebase.
+export const INSIGNIA_ROL = {
   lavador: { texto: 'Lavador', fondo: '#dbeafe', color: '#2563eb' },
+  recepcionista: { texto: 'Recepcionista', fondo: '#dcfce7', color: '#16a34a' },
   cajero: { texto: 'Cajero', fondo: '#fce7f3', color: '#db2777' },
   supervisor: { texto: 'Supervisor', fondo: '#ffedd5', color: '#c2410c' },
 };
 
 export default function ListaEmpleados({ navegarA }) {
   const [busqueda, setBusqueda] = useState('');
+  const { datos, cargando, error, recargar } = useDatos(obtenerEmpleados);
+  const empleados = datos ?? [];
 
   const empleadosFiltrados = empleados.filter((e) => e.nombre.toLowerCase().includes(busqueda.toLowerCase()));
 
@@ -48,11 +54,13 @@ export default function ListaEmpleados({ navegarA }) {
       </View>
 
       <ScrollView contentContainerStyle={estilos.lista}>
-        {empleadosFiltrados.length === 0 ? (
+        {cargando || error ? (
+          <Cargando error={error} alReintentar={recargar} />
+        ) : empleadosFiltrados.length === 0 ? (
           <SinResultados texto="No se encontraron empleados" />
         ) : (
           empleadosFiltrados.map((empleado) => {
-            const insignia = INSIGNIA_ROL[empleado.rol] || INSIGNIA_ROL.lavador;
+            const insignia = INSIGNIA_ROL[empleado.rol] || { texto: empleado.rol, fondo: colores.fondoTab, color: colores.textoSuave };
             const iniciales = empleado.nombre
               .split(' ')
               .map((p) => p[0])
@@ -62,7 +70,7 @@ export default function ListaEmpleados({ navegarA }) {
 
             return (
               <Tarjeta key={empleado.id} estilo={estilos.fila}>
-                <View style={[estilos.avatar, { backgroundColor: empleado.color }]}>
+                <View style={[estilos.avatar, { backgroundColor: colorAvatar(empleado.id) }]}>
                   <Text style={estilos.textoAvatar}>{iniciales}</Text>
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
@@ -72,12 +80,6 @@ export default function ListaEmpleados({ navegarA }) {
                 <View style={[estilos.insignia, { backgroundColor: insignia.fondo }]}>
                   <Text style={[estilos.textoInsignia, { color: insignia.color }]}>{insignia.texto}</Text>
                 </View>
-                <Pressable
-                  style={estilos.botonEditar}
-                  onPress={() => Alert.alert('Próximamente', `Aquí podrás editar a ${empleado.nombre}.`)}
-                >
-                  <Ionicons name="pencil-outline" size={16} color={colores.textoSuave} />
-                </Pressable>
               </Tarjeta>
             );
           })
@@ -118,17 +120,8 @@ const estilos = StyleSheet.create({
   textoAvatar: { color: '#ffffff', fontWeight: '700', fontSize: 13 },
   nombre: { fontSize: 14, fontWeight: '700', color: colores.texto },
   telefono: { fontSize: 12, color: colores.textoSuave, marginTop: 2 },
-  insignia: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, marginRight: 8 },
+  insignia: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
   textoInsignia: { fontSize: 11, fontWeight: '700' },
-  botonEditar: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 1,
-    borderColor: colores.borde,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 
   tarjetaNueva: {
     borderWidth: 1.5,

@@ -4,17 +4,24 @@
 
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { empleados } from '../datos/empleados';
-import { clientes } from '../datos/clientes';
+import { obtenerEmpleados } from '../firebase/empleados';
+import { obtenerClientes } from '../firebase/clientes';
+import { useDatos } from '../firebase/utilidades';
 import Encabezado from '../componentes/Encabezado';
-import Tarjeta from '../componentes/Tarjeta';
 import { colores } from '../estilos/colores';
 
+async function contarPersonas() {
+  const [empleados, clientes] = await Promise.all([obtenerEmpleados(), obtenerClientes()]);
+  return { empleados: empleados.length, clientes: clientes.length };
+}
+
 export default function Mas({ usuario, navegarA, cerrarSesion }) {
+  const { datos } = useDatos(contarPersonas);
+
   const opciones = [
     {
       titulo: 'Empleados',
-      subtitulo: `${empleados.length} empleados activos`,
+      subtitulo: `${datos?.empleados ?? '…'} empleados activos`,
       icono: 'people-outline',
       colorFondo: '#ede9fe',
       color: '#7c3aed',
@@ -22,7 +29,7 @@ export default function Mas({ usuario, navegarA, cerrarSesion }) {
     },
     {
       titulo: 'Clientes',
-      subtitulo: `${clientes.length} clientes registrados`,
+      subtitulo: `${datos?.clientes ?? '…'} clientes registrados`,
       icono: 'person-outline',
       colorFondo: '#fce7f3',
       color: '#db2777',

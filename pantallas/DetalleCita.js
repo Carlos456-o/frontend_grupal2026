@@ -3,25 +3,46 @@
 // cuando el cliente tocó una tarjeta de cita en otra pantalla.
 
 import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
-import { citas } from '../datos/citas';
-import { empleados } from '../datos/empleados';
+import { obtenerCita, cambiarEstadoCita } from '../firebase/citas';
+import { obtenerEmpleado } from '../firebase/empleados';
+import { useDatos } from '../firebase/utilidades';
 import Encabezado from '../componentes/Encabezado';
 import Tarjeta from '../componentes/Tarjeta';
 import InsigniaEstado from '../componentes/InsigniaEstado';
 import Boton from '../componentes/Boton';
 import SinResultados from '../componentes/SinResultados';
+import Cargando from '../componentes/Cargando';
 import { colores } from '../estilos/colores';
 
-export default function DetalleCita({ parametros, navegarA }) {
-  const cita = citas.find((c) => c.id === parametros.citaId);
-  const empleado = empleados.find((e) => e.id === cita?.empleadoId);
+// Trae la cita y el empleado que la atiende.
+async function cargarDetalle(citaId) {
+  const cita = await obtenerCita(citaId);
+  const empleado = cita ? await obtenerEmpleado(cita.empleadoId) : null;
+  return { cita, empleado };
+}
 
+export default function DetalleCita({ parametros, navegarA }) {
+  const { datos, cargando, error, recargar } = useDatos(() => cargarDetalle(parametros.citaId), [parametros.citaId]);
+
+  if (cargando || error) return <Cargando error={error} alReintentar={recargar} />;
+  const { cita, empleado } = datos;
   if (!cita) return <SinResultados texto="Cita no encontrada" />;
 
   function alCancelar() {
     Alert.alert('Cancelar cita', '¿Seguro que deseas cancelar esta cita?', [
       { text: 'No', style: 'cancel' },
-      { text: 'Sí, cancelar', style: 'destructive', onPress: () => navegarA('clienteCitas') },
+      {
+        text: 'Sí, cancelar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await cambiarEstadoCita(cita.id, 'cancelada');
+            navegarA('clienteCitas');
+          } catch (e) {
+            Alert.alert('Error', 'No se pudo cancelar la cita. Intenta de nuevo.');
+          }
+        },
+      },
     ]);
   }
 

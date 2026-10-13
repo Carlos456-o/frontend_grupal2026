@@ -5,12 +5,23 @@
 
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { citas } from '../datos/citas';
-import { servicios } from '../datos/servicios';
-import { actividades } from '../datos/actividades';
-import { clientes } from '../datos/clientes';
-import { empleados } from '../datos/empleados';
+import { obtenerCitasDeFecha } from '../firebase/citas';
+import { obtenerServicios, actividadesDe } from '../firebase/servicios';
+import { obtenerClientes } from '../firebase/clientes';
+import { obtenerEmpleados } from '../firebase/empleados';
+import { useDatos, hoyISO } from '../firebase/utilidades';
 import { colores } from '../estilos/colores';
+
+// Todo lo que muestra el panel, pedido a Firebase de una sola vez.
+async function cargarResumen() {
+  const [citasHoy, servicios, clientes, empleados] = await Promise.all([
+    obtenerCitasDeFecha(hoyISO()),
+    obtenerServicios(),
+    obtenerClientes(),
+    obtenerEmpleados(),
+  ]);
+  return { citasHoy, servicios, clientes, empleados };
+}
 
 const DIAS_SEMANA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 const MESES = [
@@ -24,13 +35,13 @@ function fechaDeHoyEnTexto() {
 }
 
 export default function InicioAdmin({ usuario, navegarA }) {
-  const hoyISO = new Date().toISOString().slice(0, 10);
-  const citasHoy = citas.filter((c) => c.fecha === hoyISO);
+  const { datos } = useDatos(cargarResumen);
+  const citasHoy = datos?.citasHoy ?? [];
   const ingresosHoy = citasHoy
     .filter((c) => c.estado !== 'cancelada')
-    .reduce((suma, c) => suma + c.servicio.precio, 0);
-
-  const paquetesLavado = servicios.filter((s) => s.categoriaId === 'cat1');
+    .reduce((suma, c) => suma + (c.servicio.precio ?? 0), 0);
+  // Mientras carga mostramos "…" en lugar de un 0 que confunda.
+  const cuenta = (lista) => (datos ? lista.length : '…');
 
   const iniciales = usuario.perfil.nombre
     .split(' ')
@@ -73,7 +84,7 @@ export default function InicioAdmin({ usuario, navegarA }) {
   const gestion = [
     {
       titulo: 'Servicios',
-      subtitulo: `${paquetesLavado.length} tipos de lavado registrados`,
+      subtitulo: `${cuenta(datos?.servicios ?? [])} servicios registrados`,
       icono: 'car-outline',
       colorFondo: '#dbeafe',
       color: '#2563eb',
@@ -81,7 +92,7 @@ export default function InicioAdmin({ usuario, navegarA }) {
     },
     {
       titulo: 'Catálogo',
-      subtitulo: `${actividades.length} actividades registradas`,
+      subtitulo: `${cuenta(actividadesDe(datos?.servicios ?? []))} actividades registradas`,
       icono: 'grid-outline',
       colorFondo: '#ffedd5',
       color: '#c2410c',
@@ -89,7 +100,7 @@ export default function InicioAdmin({ usuario, navegarA }) {
     },
     {
       titulo: 'Empleados',
-      subtitulo: `${empleados.length} empleados activos`,
+      subtitulo: `${cuenta(datos?.empleados ?? [])} empleados activos`,
       icono: 'people-outline',
       colorFondo: '#ede9fe',
       color: '#7c3aed',
@@ -97,7 +108,7 @@ export default function InicioAdmin({ usuario, navegarA }) {
     },
     {
       titulo: 'Clientes',
-      subtitulo: `${clientes.length} clientes registrados`,
+      subtitulo: `${cuenta(datos?.clientes ?? [])} clientes registrados`,
       icono: 'person-outline',
       colorFondo: '#fce7f3',
       color: '#db2777',
@@ -121,7 +132,7 @@ export default function InicioAdmin({ usuario, navegarA }) {
 
         <View style={estilos.filaStats}>
           <View style={estilos.stat}>
-            <Text style={estilos.statValor}>{citasHoy.length}</Text>
+            <Text style={estilos.statValor}>{cuenta(citasHoy)}</Text>
             <Text style={estilos.statEtiqueta}>Citas hoy</Text>
           </View>
           <View style={estilos.stat}>
@@ -129,7 +140,7 @@ export default function InicioAdmin({ usuario, navegarA }) {
             <Text style={estilos.statEtiqueta}>Ingresos hoy</Text>
           </View>
           <View style={estilos.stat}>
-            <Text style={[estilos.statValor, { color: '#7c3aed' }]}>{empleados.length}</Text>
+            <Text style={[estilos.statValor, { color: '#7c3aed' }]}>{cuenta(datos?.empleados ?? [])}</Text>
             <Text style={estilos.statEtiqueta}>Empleados activos</Text>
           </View>
         </View>

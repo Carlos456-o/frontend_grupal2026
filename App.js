@@ -14,11 +14,9 @@
 import { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
-import { usuarios } from './datos/usuarios';
-import { clientes } from './datos/clientes';
-import { empleados } from './datos/empleados';
+import { buscarUsuario } from './firebase/usuarios';
 
 import MenuInferior from './componentes/MenuInferior';
 import { colores } from './estilos/colores';
@@ -44,7 +42,6 @@ import PerfilEmpleado from './pantallas/PerfilEmpleado';
 import InicioAdmin from './pantallas/InicioAdmin';
 import CitasDeHoy from './pantallas/CitasDeHoy';
 import GestionCatalogo from './pantallas/GestionCatalogo';
-import NuevaActividad from './pantallas/NuevaActividad';
 import ListaEmpleados from './pantallas/ListaEmpleados';
 import NuevoEmpleado from './pantallas/NuevoEmpleado';
 import NuevoServicio from './pantallas/NuevoServicio';
@@ -89,12 +86,17 @@ export default function App() {
     setParametros(nuevosParametros);
   }
 
-  // Busca el usuario en datos/usuarios.js y, si el teléfono y la
+  // Busca el usuario en la colección "usuarios" de Firebase y, si el teléfono y la
   // contraseña coinciden, guarda la sesión y lo manda a su pantalla de inicio.
   // "tipoCuenta" viene del selector "Cliente / Empleado / Administrador" del
   // login: sirve para avisar si alguien intenta entrar por la pestaña equivocada.
-  function iniciarSesion(telefono, contrasena, tipoCuenta) {
-    const usuarioEncontrado = usuarios.find((u) => u.telefono === telefono && u.contrasena === contrasena);
+  async function iniciarSesion(telefono, contrasena, tipoCuenta) {
+    let usuarioEncontrado;
+    try {
+      usuarioEncontrado = await buscarUsuario(telefono, contrasena);
+    } catch (e) {
+      return { ok: false, error: 'No se pudo conectar con el servidor. Intenta de nuevo.' };
+    }
 
     if (!usuarioEncontrado) {
       return { ok: false, error: 'Teléfono o contraseña incorrectos' };
@@ -106,16 +108,15 @@ export default function App() {
     if (tipoCuentaReal !== tipoCuenta) {
       return {
         ok: false,
-        error: `Esta cuenta es de ${NOMBRES_TIPO_CUENTA[tipoCuentaReal]}. Cambia a esa pestaña.`,
+        error: `Esta cuenta es de ${NOMBRES_TIPO_CUENTA[tipoCuentaReal] ?? usuarioEncontrado.rol}. Cambia a esa pestaña.`,
       };
     }
 
-    const perfil =
-      usuarioEncontrado.rol === 'cliente'
-        ? clientes.find((c) => c.id === usuarioEncontrado.perfilId)
-        : empleados.find((e) => e.id === usuarioEncontrado.perfilId);
+    if (!usuarioEncontrado.perfil) {
+      return { ok: false, error: 'La cuenta no tiene un perfil de cliente o empleado. Avisa al administrador.' };
+    }
 
-    setUsuario({ ...usuarioEncontrado, perfil });
+    setUsuario(usuarioEncontrado);
 
     if (usuarioEncontrado.rol === 'cliente') navegarA('clienteInicio');
     else if (usuarioEncontrado.rol === 'empleado') navegarA('empleadoInicio');
@@ -180,8 +181,6 @@ export default function App() {
         return <SeguimientoLavado {...propsComunes} />;
       case 'adminCatalogo':
         return <GestionCatalogo {...propsComunes} />;
-      case 'adminNuevaActividad':
-        return <NuevaActividad {...propsComunes} />;
       case 'adminEmpleados':
         return <ListaEmpleados {...propsComunes} />;
       case 'adminNuevoEmpleado':
@@ -214,17 +213,19 @@ export default function App() {
   }
 
   return (
-    <SafeAreaView style={estilos.contenedor}>
-      <StatusBar style="dark" />
-      <View style={estilos.contenido}>{renderizarPantalla()}</View>
-      {menuOpciones ? (
-        <MenuInferior opciones={menuOpciones} pantallaActiva={pantalla} alCambiarPantalla={navegarA} />
-      ) : null}
-    </SafeAreaView>
+    <SafeAreaProvider>
+      <SafeAreaView style={estilos.contenedor}>
+        <StatusBar style="dark" />
+        <View style={estilos.contenido}>{renderizarPantalla()}</View>
+        {menuOpciones ? (
+          <MenuInferior opciones={menuOpciones} pantallaActiva={pantalla} alCambiarPantalla={navegarA} />
+        ) : null}
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 
 const estilos = StyleSheet.create({
-  contenedor: { marginTop: 45, flex: 2, backgroundColor: colores.fondo },
+  contenedor: { flex: 1, backgroundColor: colores.fondo },
   contenido: { flex: 1 },
 });

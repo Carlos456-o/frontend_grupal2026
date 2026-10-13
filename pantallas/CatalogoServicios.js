@@ -1,6 +1,6 @@
 // PANTALLA: Catálogo de servicios
-// Muestra todos los servicios agrupados por categoría (Lavados, Estética,
-// Mantenimiento Básico...), con un buscador y chips para filtrar.
+// Muestra la lista de la colección "catalogo" de Firebase con el precio y
+// la duración de cada servicio (ver firebase/servicios.js), con un buscador.
 // La usan dos casos: un cliente que ya inició sesión (ahí "usuario" existe
 // y el menú de abajo ya deja moverse a otras pantallas), y alguien que
 // entró como invitado desde el login (ahí "usuario" es null).
@@ -9,22 +9,20 @@ import { useState } from 'react';
 import { View, Text, TextInput, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { servicios } from '../datos/servicios';
-import { catalogo } from '../datos/catalogo';
+import { obtenerCatalogo } from '../firebase/servicios';
+import { useDatos } from '../firebase/utilidades';
 import TarjetaServicioResumen from '../componentes/TarjetaServicioResumen';
 import Boton from '../componentes/Boton';
 import SinResultados from '../componentes/SinResultados';
+import Cargando from '../componentes/Cargando';
 import { colores, degradados } from '../estilos/colores';
 
 export default function CatalogoServicios({ usuario, navegarA }) {
   const [busqueda, setBusqueda] = useState('');
-  const [categoriaActiva, setCategoriaActiva] = useState('todos');
+  const { datos: catalogo, cargando, error, recargar } = useDatos(obtenerCatalogo);
 
-  const serviciosFiltrados = servicios.filter((servicio) => {
-    const coincideCategoria = categoriaActiva === 'todos' || servicio.categoriaId === categoriaActiva;
-    const coincideBusqueda = servicio.nombre.toLowerCase().includes(busqueda.trim().toLowerCase());
-    return coincideCategoria && coincideBusqueda;
-  });
+  const texto = busqueda.trim().toLowerCase();
+  const catalogoFiltrado = (catalogo ?? []).filter((item) => item.nombre.toLowerCase().includes(texto));
 
   return (
     <View style={estilos.contenedor}>
@@ -60,49 +58,15 @@ export default function CatalogoServicios({ usuario, navegarA }) {
       ) : null}
 
       <ScrollView style={estilos.contenido} contentContainerStyle={estilos.contenidoInterno}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={estilos.filaChips}>
-          <Chip texto="Todos" activo={categoriaActiva === 'todos'} alPresionar={() => setCategoriaActiva('todos')} />
-          {catalogo.map((categoria) => (
-            <Chip
-              key={categoria.id}
-              texto={categoria.nombre}
-              activo={categoriaActiva === categoria.id}
-              alPresionar={() => setCategoriaActiva(categoria.id)}
-            />
-          ))}
-        </ScrollView>
-
-        {serviciosFiltrados.length === 0 ? (
+        {cargando || error ? (
+          <Cargando error={error} alReintentar={recargar} />
+        ) : catalogoFiltrado.length === 0 ? (
           <SinResultados texto="No encontramos servicios con ese filtro" />
         ) : (
-          catalogo.map((categoria) => {
-            const serviciosDeCategoria = serviciosFiltrados.filter((s) => s.categoriaId === categoria.id);
-            if (serviciosDeCategoria.length === 0) return null;
-            return (
-              <View key={categoria.id} style={estilos.grupo}>
-                <View style={estilos.tituloGrupo}>
-                  <View style={[estilos.puntoColor, { backgroundColor: categoria.color }]} />
-                  <Text style={[estilos.textoTituloGrupo, { color: categoria.color }]}>
-                    {categoria.nombre.toUpperCase()}
-                  </Text>
-                </View>
-                {serviciosDeCategoria.map((servicio) => (
-                  <TarjetaServicioResumen key={servicio.id} servicio={servicio} />
-                ))}
-              </View>
-            );
-          })
+          catalogoFiltrado.map((item) => <TarjetaServicioResumen key={item.catalogoId} servicio={item} />)
         )}
       </ScrollView>
     </View>
-  );
-}
-
-function Chip({ texto, activo, alPresionar }) {
-  return (
-    <Pressable onPress={alPresionar} style={[estilos.chip, activo && estilos.chipActivo]}>
-      <Text style={[estilos.textoChip, activo && estilos.textoChipActivo]}>{texto}</Text>
-    </Pressable>
   );
 }
 
@@ -130,22 +94,4 @@ const estilos = StyleSheet.create({
   contenido: { flex: 1 },
   contenidoInterno: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24 },
 
-  filaChips: { marginBottom: 16 },
-  chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: colores.borde,
-    marginRight: 8,
-  },
-  chipActivo: { backgroundColor: '#132048', borderColor: '#132048' },
-  textoChip: { fontSize: 13, fontWeight: '600', color: colores.textoSuave },
-  textoChipActivo: { color: '#ffffff' },
-
-  grupo: { marginBottom: 20 },
-  tituloGrupo: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  puntoColor: { width: 7, height: 7, borderRadius: 4, marginRight: 8 },
-  textoTituloGrupo: { fontSize: 12, fontWeight: '700', color: colores.textoSuave, letterSpacing: 1 },
 });

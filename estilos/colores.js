@@ -23,11 +23,29 @@ export const degradados = {
   inicio: ['#4c1d95', '#4338ca'], // morado -> azul (encabezado de Inicio y Catálogo del cliente)
 };
 
-// Colores según el estado de una cita (pendiente, confirmada, etc.)
+// Colores según el estado de una cita (los mismos estados que en Firebase).
 export const coloresPorEstado = {
   pendiente: { fondo: '#fef3c7', texto: '#92400e' },
   confirmada: { fondo: '#dbeafe', texto: '#1e40af' },
   en_proceso: { fondo: '#e0e7ff', texto: '#3730a3' },
-  completada: { fondo: '#dcfce7', texto: '#166534' },
+  terminado: { fondo: '#dcfce7', texto: '#166534' },
   cancelada: { fondo: '#fee2e2', texto: '#991b1b' },
 };
+
+// Cómo se muestra cada estado en pantalla.
+export const nombresEstado = {
+  pendiente: 'Pendiente',
+  confirmada: 'Confirmada',
+  en_proceso: 'En proceso',
+  terminado: 'Terminado',
+  cancelada: 'Cancelada',
+};
+
+// Color fijo para el círculo de iniciales de una persona, calculado a
+// partir de su id (así siempre le toca el mismo color).
+const COLORES_AVATAR = ['#7c3aed', '#0891b2', '#f97316', '#db2777', '#16a34a', '#2563eb'];
+export function colorAvatar(id = '') {
+  let suma = 0;
+  for (const letra of id) suma += letra.charCodeAt(0);
+  return COLORES_AVATAR[suma % COLORES_AVATAR.length];
+}

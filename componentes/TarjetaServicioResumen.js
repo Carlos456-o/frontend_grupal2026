@@ -2,8 +2,8 @@
 // y la descripción, y el precio a la derecha.
 // La usamos en la pantalla de Inicio (servicios destacados) y en el
 // Catálogo de servicios (lista completa agrupada por categoría).
-// Si el servicio tiene "destacado: true" (ver datos/servicios.js), la
-// tarjeta se resalta con un borde morado, como el "más pedido".
+// Si el servicio tiene "destacado: true", la tarjeta se resalta con un
+// borde morado, como el "más pedido".
 
 import { Pressable, View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,10 +20,11 @@ export default function TarjetaServicioResumen({ servicio, alPresionar }) {
         <View style={estilos.textos}>
           <Text style={estilos.nombre}>{servicio.nombre}</Text>
           <Text style={estilos.descripcion}>
-            {servicio.descripcion} · {servicio.duracionMinutos} min
+            {servicio.descripcion}
+            {servicio.duracionMinutos != null ? ` · ${servicio.duracionMinutos} min` : ''}
           </Text>
         </View>
-        <Text style={estilos.precio}>C${servicio.precio}</Text>
+        {servicio.precio != null ? <Text style={estilos.precio}>C${servicio.precio}</Text> : null}
       </Tarjeta>
     </Pressable>
   );

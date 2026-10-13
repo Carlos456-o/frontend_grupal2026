@@ -5,8 +5,9 @@
 
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { citas } from '../datos/citas';
-import { servicios } from '../datos/servicios';
+import { obtenerCitasDeCliente } from '../firebase/citas';
+import { obtenerCatalogo } from '../firebase/servicios';
+import { useDatos } from '../firebase/utilidades';
 import Tarjeta from '../componentes/Tarjeta';
 import TarjetaServicioResumen from '../componentes/TarjetaServicioResumen';
 import Boton from '../componentes/Boton';
@@ -20,16 +21,18 @@ const AVISO_POR_ESTADO = {
 };
 
 export default function InicioCliente({ usuario, navegarA }) {
-  const misCitas = citas.filter((c) => c.clienteId === usuario.perfil.id);
+  const { datos: misCitas } = useDatos(() => obtenerCitasDeCliente(usuario.perfil.id), [usuario.perfil.id]);
   // La próxima cita "activa": primero buscamos una confirmada, si no hay
   // mostramos una pendiente, y si no hay ninguna, no mostramos nada.
+  const citas = misCitas ?? [];
   const citaDestacada =
-    misCitas.find((c) => c.estado === 'confirmada') ||
-    misCitas.find((c) => c.estado === 'en_proceso') ||
-    misCitas.find((c) => c.estado === 'pendiente');
+    citas.find((c) => c.estado === 'confirmada') ||
+    citas.find((c) => c.estado === 'en_proceso') ||
+    citas.find((c) => c.estado === 'pendiente');
 
-  // Solo mostramos 2 servicios como "destacados" en el inicio.
-  const serviciosDestacados = servicios.slice(0, 2);
+  // Solo mostramos 2 servicios del catálogo de Firebase como "destacados" en el inicio.
+  const { datos: catalogo } = useDatos(obtenerCatalogo);
+  const serviciosDestacados = (catalogo ?? []).slice(0, 2);
 
   // Iniciales del nombre, para el círculo de avatar (ej. "Andrea Salazar" -> "AS").
   const iniciales = usuario.perfil.nombre
@@ -74,10 +77,10 @@ export default function InicioCliente({ usuario, navegarA }) {
               <View
                 style={[
                   estilos.iconoAviso,
-                  { backgroundColor: coloresPorEstado[citaDestacada.estado].fondo },
+                  { backgroundColor: (coloresPorEstado[citaDestacada.estado] ?? coloresPorEstado.pendiente).fondo },
                 ]}
               >
-                <Text style={{ color: coloresPorEstado[citaDestacada.estado].texto }}>
+                <Text style={{ color: (coloresPorEstado[citaDestacada.estado] ?? coloresPorEstado.pendiente).texto }}>
                   {AVISO_POR_ESTADO[citaDestacada.estado]?.icono || '📅'}
                 </Text>
               </View>
@@ -103,7 +106,7 @@ export default function InicioCliente({ usuario, navegarA }) {
           </Text>
         </View>
         {serviciosDestacados.map((servicio) => (
-          <TarjetaServicioResumen key={servicio.id} servicio={servicio} />
+          <TarjetaServicioResumen key={servicio.catalogoId} servicio={servicio} />
         ))}
       </View>
     </ScrollView>

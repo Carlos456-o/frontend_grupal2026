@@ -1,48 +1,51 @@
 // PANTALLA: Gestión de catálogo (admin)
 // Junta dos vistas en una sola pantalla, con una pestaña interna arriba:
-//   "Servicios"   -> los paquetes de lavado (editar / eliminar, con las
-//                    actividades que los componen como etiquetas)
-//   "Actividades" -> el catálogo de tareas individuales (datos/actividades.js)
+//   "Servicios"   -> la colección "servicios" de Firebase (editar / eliminar,
+//                    con las actividades que incluyen como etiquetas)
+//   "Actividades" -> las actividades que usan los servicios (salen de
+//                    "actividades_incluidas"; no tienen colección propia)
 // "parametros.pestanaInicial" deja abrir la pantalla ya en una de las dos
 // (por ejemplo, desde el Panel de administración).
 
 import { useState } from 'react';
 import { View, Text, TextInput, ScrollView, Pressable, StyleSheet, Alert } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { servicios } from '../datos/servicios';
-import { actividades } from '../datos/actividades';
+import { Ionicons } from '@expo/vector-icons';
+import { obtenerServicios, eliminarServicio, actividadesDe } from '../firebase/servicios';
+import { useDatos } from '../firebase/utilidades';
 import Tarjeta from '../componentes/Tarjeta';
 import Boton from '../componentes/Boton';
 import SinResultados from '../componentes/SinResultados';
+import Cargando from '../componentes/Cargando';
 import { colores } from '../estilos/colores';
-
-const paquetesLavado = servicios.filter((s) => s.categoriaId === 'cat1');
-
-function IconoActividad({ nombreIcono, set, color, tamano = 16 }) {
-  if (set === 'material') {
-    return <MaterialCommunityIcons name={nombreIcono} size={tamano} color={color} />;
-  }
-  return <Ionicons name={nombreIcono} size={tamano} color={color} />;
-}
 
 export default function GestionCatalogo({ parametros, navegarA }) {
   const [pestana, setPestana] = useState(parametros.pestanaInicial || 'servicios');
   const [busqueda, setBusqueda] = useState('');
+  const { datos, cargando, error, recargar } = useDatos(obtenerServicios);
+  const servicios = datos ?? [];
+  const actividades = actividadesDe(servicios);
 
-  function confirmarEliminar(nombre) {
-    Alert.alert('Eliminar', `¿Seguro que deseas eliminar "${nombre}"?`, [
+  function confirmarEliminar(servicio) {
+    Alert.alert('Eliminar', `¿Seguro que deseas eliminar "${servicio.nombre}"? También se quitará del catálogo.`, [
       { text: 'Cancelar', style: 'cancel' },
-      // Todavía no hay backend, así que solo avisamos (no se borra de verdad).
-      { text: 'Eliminar', style: 'destructive', onPress: () => Alert.alert('Eliminado', `"${nombre}" fue eliminado.`) },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await eliminarServicio(servicio);
+            recargar();
+          } catch (e) {
+            Alert.alert('Error', 'No se pudo eliminar el servicio. Intenta de nuevo.');
+          }
+        },
+      },
     ]);
   }
 
-  function alEditar(nombre) {
-    Alert.alert('Próximamente', `Aquí podrás editar "${nombre}" cuando conectemos el backend.`);
-  }
-
-  const serviciosFiltrados = paquetesLavado.filter((s) => s.nombre.toLowerCase().includes(busqueda.toLowerCase()));
-  const actividadesFiltradas = actividades.filter((a) => a.nombre.toLowerCase().includes(busqueda.toLowerCase()));
+  const texto = busqueda.toLowerCase();
+  const serviciosFiltrados = servicios.filter((s) => s.nombre.toLowerCase().includes(texto));
+  const actividadesFiltradas = actividades.filter((a) => a.nombre.toLowerCase().includes(texto));
 
   return (
     <View style={estilos.contenedor}>
@@ -54,15 +57,13 @@ export default function GestionCatalogo({ parametros, navegarA }) {
           <Text style={estilos.titulo}>{pestana === 'servicios' ? 'Servicios' : 'Catálogo de actividades'}</Text>
           <Text style={estilos.subtitulo}>
             {pestana === 'servicios'
-              ? `${paquetesLavado.length} tipos de lavado registrados`
+              ? `${servicios.length} servicios registrados`
               : `${actividades.length} actividades · usadas para armar servicios`}
           </Text>
         </View>
-        <Boton
-          texto="+ Nuevo"
-          alPresionar={() => navegarA(pestana === 'servicios' ? 'adminNuevoServicio' : 'adminNuevaActividad')}
-          estilo={estilos.botonNuevo}
-        />
+        {pestana === 'servicios' ? (
+          <Boton texto="+ Nuevo" alPresionar={() => navegarA('adminNuevoServicio')} estilo={estilos.botonNuevo} />
+        ) : null}
       </View>
 
       <View style={estilos.selector}>
@@ -94,40 +95,44 @@ export default function GestionCatalogo({ parametros, navegarA }) {
       </View>
 
       <ScrollView contentContainerStyle={estilos.lista}>
-        {pestana === 'servicios' ? (
+        {cargando || error ? (
+          <Cargando error={error} alReintentar={recargar} />
+        ) : pestana === 'servicios' ? (
           serviciosFiltrados.length === 0 ? (
             <SinResultados texto="No se encontraron servicios" />
           ) : (
             serviciosFiltrados.map((servicio) => (
-              <Tarjeta key={servicio.id} estilo={servicio.destacado ? estilos.tarjetaDestacada : null}>
+              <Tarjeta key={servicio.id}>
                 <View style={estilos.filaServicio}>
-                  <View style={[estilos.iconoCuadro, { backgroundColor: servicio.colorFondoIcono }]}>
-                    <Ionicons name={servicio.icono} size={20} color={servicio.colorIcono} />
+                  <View style={estilos.iconoCuadro}>
+                    <Ionicons name="car-outline" size={20} color={colores.principal} />
                   </View>
                   <View style={{ flex: 1, marginLeft: 12 }}>
                     <Text style={estilos.nombreServicio}>{servicio.nombre}</Text>
                     <Text style={estilos.detalleServicio}>
-                      {servicio.descripcion} · {servicio.duracionMinutos} min
+                      {servicio.descripcion}
+                      {servicio.duracionMinutos != null ? ` · ${servicio.duracionMinutos} min` : ''}
                     </Text>
                   </View>
                   <Text style={estilos.precioServicio}>C${servicio.precio}</Text>
                 </View>
 
                 <View style={estilos.filaEtiquetas}>
-                  {(servicio.actividadesIds || []).map((id) => {
-                    const actividad = actividades.find((a) => a.id === id);
-                    if (!actividad) return null;
-                    return (
-                      <View key={id} style={estilos.etiqueta}>
-                        <Text style={estilos.textoEtiqueta}>{actividad.nombre}</Text>
-                      </View>
-                    );
-                  })}
+                  {servicio.actividades.map((actividad) => (
+                    <View key={actividad} style={estilos.etiqueta}>
+                      <Text style={estilos.textoEtiqueta}>{actividad}</Text>
+                    </View>
+                  ))}
                 </View>
 
                 <View style={estilos.filaBotones}>
-                  <Boton texto="Editar" tipo="borde" alPresionar={() => alEditar(servicio.nombre)} estilo={estilos.botonMitad} />
-                  <Boton texto="Eliminar" tipo="peligro" alPresionar={() => confirmarEliminar(servicio.nombre)} estilo={estilos.botonMitad} />
+                  <Boton
+                    texto="Editar"
+                    tipo="borde"
+                    alPresionar={() => navegarA('adminNuevoServicio', { servicio })}
+                    estilo={estilos.botonMitad}
+                  />
+                  <Boton texto="Eliminar" tipo="peligro" alPresionar={() => confirmarEliminar(servicio)} estilo={estilos.botonMitad} />
                 </View>
               </Tarjeta>
             ))
@@ -136,17 +141,16 @@ export default function GestionCatalogo({ parametros, navegarA }) {
           <SinResultados texto="No se encontraron actividades" />
         ) : (
           actividadesFiltradas.map((actividad) => (
-            <Tarjeta key={actividad.id} estilo={estilos.filaActividad}>
-              <View style={[estilos.iconoCuadro, { backgroundColor: actividad.colorFondoIcono }]}>
-                <IconoActividad nombreIcono={actividad.icono} set={actividad.iconoSet} color={actividad.colorIcono} tamano={20} />
+            <Tarjeta key={actividad.nombre} estilo={estilos.filaActividad}>
+              <View style={estilos.iconoCuadro}>
+                <Ionicons name="checkmark-circle-outline" size={20} color={colores.principal} />
               </View>
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={estilos.nombreServicio}>{actividad.nombre}</Text>
-                <Text style={estilos.detalleServicio}>{actividad.descripcion}</Text>
+                <Text style={estilos.detalleServicio}>
+                  Incluida en {actividad.cantidadServicios} servicio(s)
+                </Text>
               </View>
-              <Pressable style={estilos.botonEditarChico} onPress={() => alEditar(actividad.nombre)}>
-                <Ionicons name="pencil-outline" size={16} color={colores.textoSuave} />
-              </Pressable>
             </Tarjeta>
           ))
         )}
@@ -195,9 +199,15 @@ const estilos = StyleSheet.create({
 
   lista: { padding: 16, paddingBottom: 24 },
 
-  tarjetaDestacada: { borderColor: '#7c3aed', borderWidth: 2, backgroundColor: '#f5f3ff' },
   filaServicio: { flexDirection: 'row', alignItems: 'center' },
-  iconoCuadro: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  iconoCuadro: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colores.fondoTab,
+  },
   nombreServicio: { fontSize: 14, fontWeight: '700', color: colores.texto },
   detalleServicio: { fontSize: 12, color: colores.textoSuave, marginTop: 2 },
   precioServicio: { fontSize: 14, fontWeight: '700', color: colores.texto },
@@ -210,13 +220,4 @@ const estilos = StyleSheet.create({
   botonMitad: { flex: 1 },
 
   filaActividad: { flexDirection: 'row', alignItems: 'center' },
-  botonEditarChico: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colores.borde,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 });

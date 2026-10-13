@@ -1,7 +1,7 @@
 // PANTALLA: Iniciar sesión
 // Es la primera pantalla que ve cualquier persona al abrir la app.
 // Pide teléfono y contraseña, y usa la función "iniciarSesion" que viene
-// de App.js (ahí es donde se revisan los datos contra datos/usuarios.js).
+// de App.js (ahí es donde se revisan los datos contra la colección "usuarios" de Firebase).
 //
 // El selector "Cliente / Empleado / Administrador" de arriba es solo para
 // saber qué tipo de cuenta esperamos: si eliges una pestaña que no
@@ -25,10 +25,17 @@ export default function IniciarSesion({ iniciarSesion, navegarA }) {
   const [telefono, setTelefono] = useState('');
   const [contrasena, setContrasena] = useState('');
   const [error, setError] = useState('');
+  const [cargando, setCargando] = useState(false);
 
-  function alPresionarIngresar() {
-    const resultado = iniciarSesion(telefono.trim(), contrasena, tipoCuenta);
-    setError(resultado.ok ? '' : resultado.error);
+  async function alPresionarIngresar() {
+    if (cargando) return;
+    setCargando(true);
+    const resultado = await iniciarSesion(telefono.trim(), contrasena, tipoCuenta);
+    // Si el login salió bien, esta pantalla ya se cerró y no hay que tocar su estado.
+    if (!resultado.ok) {
+      setError(resultado.error);
+      setCargando(false);
+    }
   }
 
   function alPresionarInvitado() {
@@ -91,7 +98,7 @@ export default function IniciarSesion({ iniciarSesion, navegarA }) {
 
           {error ? <Text style={estilos.error}>{error}</Text> : null}
 
-          <Boton texto="Iniciar sesión" alPresionar={alPresionarIngresar} estilo={estilos.botonIngresar} />
+          <Boton texto={cargando ? 'Ingresando...' : 'Iniciar sesión'} alPresionar={alPresionarIngresar} estilo={estilos.botonIngresar} />
 
           <View style={estilos.divisor}>
             <View style={estilos.lineaDivisor} />
