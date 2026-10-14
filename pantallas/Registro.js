@@ -1,12 +1,12 @@
-// PANTALLA: Registro
+// PANTALLA: Registro (crear usuario)
 // Formulario para crear una cuenta nueva de cliente, dividido en 2 pasos
 // para que no se vea todo amontonado:
-//   Paso 1: foto (opcional) + datos personales
-//   Paso 2: vehículo (opcional) + contraseña
+//   Paso 1: datos del cliente  -> colección "clientes" (nombre, telefono, email)
+//   Paso 2: datos de la cuenta -> colección "usuarios" (telefono, contrasena, rol)
 //
 // Usamos una variable de estado "paso" (1 o 2) para saber cuál de los
-// dos bloques mostrar. Al final se guarda el cliente en la colección
-// "clientes" y su cuenta en "usuarios" de Firebase.
+// dos bloques mostrar. Al final se crean los dos documentos en Firebase.
+// El vehículo NO se pide aquí: el cliente lo agrega después dentro de la app.
 
 import { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, Alert, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
@@ -25,8 +25,6 @@ export default function Registro({ navegarA }) {
   const [correo, setCorreo] = useState('');
 
   // Datos del paso 2
-  const [placa, setPlaca] = useState('');
-  const [modelo, setModelo] = useState('');
   const [contrasena, setContrasena] = useState('');
   const [confirmarContrasena, setConfirmarContrasena] = useState('');
   const [guardando, setGuardando] = useState(false);
@@ -37,8 +35,12 @@ export default function Registro({ navegarA }) {
   }
 
   function alPresionarSiguiente() {
-    if (!nombre || !telefono) {
+    if (!nombre.trim() || !telefono.trim()) {
       Alert.alert('Datos incompletos', 'Completa al menos tu nombre y tu teléfono.');
+      return;
+    }
+    if (correo.trim() && !/^\S+@\S+\.\S+$/.test(correo.trim())) {
+      Alert.alert('Correo inválido', 'Revisa tu correo o déjalo vacío.');
       return;
     }
     setPaso(2);
@@ -54,10 +56,6 @@ export default function Registro({ navegarA }) {
       Alert.alert('Las contraseñas no coinciden', 'Revisa que sean iguales.');
       return;
     }
-    if ((placa.trim() && !modelo.trim()) || (!placa.trim() && modelo.trim())) {
-      Alert.alert('Vehículo incompleto', 'Escribe la placa y el modelo, o deja los dos vacíos.');
-      return;
-    }
 
     setGuardando(true);
     try {
@@ -70,7 +68,6 @@ export default function Registro({ navegarA }) {
         nombre: nombre.trim(),
         telefono: telefono.trim(),
         correo: correo.trim(),
-        vehiculo: placa.trim() ? { placa: placa.trim().toUpperCase(), modelo: modelo.trim() } : null,
         contrasena,
       });
     } catch (e) {
@@ -141,14 +138,11 @@ export default function Registro({ navegarA }) {
           </View>
         ) : (
           <View>
-            <Text style={[estilos.tituloSeccion, estilos.colorNaranja]}>Vehículo (opcional)</Text>
-            <View style={estilos.filaDoble}>
-              <View style={estilos.mitad}>
-                <CampoTexto etiqueta="Placa" valor={placa} alCambiar={setPlaca} autoCapitalize="characters" />
-              </View>
-              <View style={estilos.mitad}>
-                <CampoTexto etiqueta="Modelo" valor={modelo} alCambiar={setModelo} />
-              </View>
+            <Text style={[estilos.tituloSeccion, estilos.colorAzul]}>Datos de tu cuenta</Text>
+            <View style={estilos.resumenCuenta}>
+              <Text style={estilos.etiquetaResumen}>Iniciarás sesión con</Text>
+              <Text style={estilos.valorResumen}>📱 {telefono.trim()}</Text>
+              <Text style={estilos.notaResumen}>Tus vehículos los podrás agregar dentro de la app.</Text>
             </View>
 
             <Text style={[estilos.tituloSeccion, estilos.colorAzul]}>Crea tu contraseña</Text>
@@ -246,11 +240,17 @@ const estilos = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 12,
   },
-  colorNaranja: { color: '#c2410c' },
   colorAzul: { color: colores.principal, marginTop: 8 },
 
-  filaDoble: { flexDirection: 'row', gap: 12 },
-  mitad: { flex: 1 },
+  resumenCuenta: {
+    backgroundColor: colores.fondoTab,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+  },
+  etiquetaResumen: { fontSize: 12, color: colores.textoSuave },
+  valorResumen: { fontSize: 16, fontWeight: '700', color: colores.texto, marginTop: 4 },
+  notaResumen: { fontSize: 12, color: colores.textoSuave, marginTop: 8 },
 
   bloqueSeguridad: { marginTop: -8, marginBottom: 16 },
   filaSegmentos: { flexDirection: 'row', gap: 6, marginBottom: 6 },

@@ -3,7 +3,7 @@
 //         perfil_id (id en "clientes" o "empleados"), fecha_registro
 // Dentro de la app el rol "administrador" se llama "admin".
 
-import { collection, getDocs, addDoc, query, where, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, doc, query, where, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from './config';
 import { obtenerCliente } from './clientes';
 import { obtenerEmpleado } from './empleados';
@@ -44,15 +44,29 @@ export async function buscarUsuario(telefono, contrasena) {
 
 // Registra un cliente nuevo: crea su documento en "clientes" y su
 // usuario en "usuarios" para que pueda iniciar sesión.
-export async function registrarCliente({ nombre, telefono, correo, vehiculo, contrasena }) {
-  const cliente = await addDoc(collection(db, 'clientes'), {
+// Los vehículos no se piden aquí: empiezan vacíos y el cliente los agrega
+// dentro de la app (pantalla "Mis vehículos").
+// Usamos un "batch" para que los dos documentos se guarden juntos: o se
+// crean ambos o ninguno, así no queda un cliente sin cuenta.
+export async function registrarCliente({ nombre, telefono, correo, contrasena }) {
+  const lote = writeBatch(db);
+  const cliente = doc(collection(db, 'clientes'));
+  lote.set(cliente, {
     nombre,
     telefono,
     email: correo,
-    vehiculos: vehiculo ? [vehiculo] : [],
+    vehiculos: [],
     fecha_registro: serverTimestamp(),
   });
-  await crearUsuario({ telefono, contrasena, rol: 'cliente', perfilId: cliente.id });
+  lote.set(doc(coleccion), {
+    telefono,
+    contrasena,
+    rol: 'cliente',
+    perfil_id: cliente.id,
+    fecha_registro: serverTimestamp(),
+  });
+  await lote.commit();
+  return cliente.id;
 }
 
 export async function crearUsuario({ telefono, contrasena, rol, perfilId }) {
