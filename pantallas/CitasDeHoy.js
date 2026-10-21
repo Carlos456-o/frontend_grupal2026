@@ -10,6 +10,7 @@ import { obtenerClientes } from '../firebase/clientes';
 import { useDatos, hoyISO } from '../firebase/utilidades';
 import SinResultados from '../componentes/SinResultados';
 import Cargando from '../componentes/Cargando';
+import Estrellas from '../componentes/Estrellas';
 import { colores, coloresPorEstado, nombresEstado, colorAvatar } from '../estilos/colores';
 
 const RANGOS = [
@@ -115,25 +116,46 @@ export default function CitasDeHoy({ navegarA }) {
             return (
               <Pressable
                 key={cita.id}
-                style={estilos.filaCita}
+                style={estilos.tarjetaCita}
                 onPress={() => navegarA('adminSeguimientoLavado', { citaId: cita.id })}
               >
-                <View style={estilos.columnaHora}>
-                  <Text style={estilos.hora}>{cita.hora}</Text>
-                  {rango === 'todas' ? <Text style={estilos.fecha}>{cita.fecha.slice(5)}</Text> : null}
+                <View style={estilos.filaCita}>
+                  <View style={estilos.columnaHora}>
+                    <Text style={estilos.hora}>{cita.hora}</Text>
+                    {rango === 'todas' ? <Text style={estilos.fecha}>{cita.fecha.slice(5)}</Text> : null}
+                  </View>
+                  <View style={[estilos.avatarChico, { backgroundColor: colorAvatar(cita.clienteId) }]}>
+                    <Text style={estilos.textoAvatarChico}>{iniciales}</Text>
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={estilos.nombreCliente}>{cliente?.nombre || 'Cliente no encontrado'}</Text>
+                    <Text style={estilos.detalleCita}>
+                      {cita.servicio.nombre} · {cita.vehiculo.placa}
+                    </Text>
+                  </View>
+                  <View style={[estilos.insigniaEstado, { backgroundColor: color.fondo }]}>
+                    <Text style={[estilos.textoInsignia, { color: color.texto }]}>{nombresEstado[cita.estado] ?? cita.estado}</Text>
+                  </View>
                 </View>
-                <View style={[estilos.avatarChico, { backgroundColor: colorAvatar(cita.clienteId) }]}>
-                  <Text style={estilos.textoAvatarChico}>{iniciales}</Text>
-                </View>
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={estilos.nombreCliente}>{cliente?.nombre || 'Cliente no encontrado'}</Text>
-                  <Text style={estilos.detalleCita}>
-                    {cita.servicio.nombre} · {cita.vehiculo.placa}
-                  </Text>
-                </View>
-                <View style={[estilos.insigniaEstado, { backgroundColor: color.fondo }]}>
-                  <Text style={[estilos.textoInsignia, { color: color.texto }]}>{nombresEstado[cita.estado] ?? cita.estado}</Text>
-                </View>
+
+                {/* Debajo de cada servicio terminado: lo que calificó el cliente. */}
+                {cita.estado === 'terminado' ? (
+                  <View style={estilos.bloqueCalificacion}>
+                    {cita.calificacion ? (
+                      <>
+                        <View style={estilos.filaEstrellas}>
+                          <Estrellas valor={cita.calificacion.estrellas} tamano={14} />
+                          <Text style={estilos.textoCalificacion}>{cita.calificacion.estrellas}/5</Text>
+                        </View>
+                        {cita.calificacion.comentario ? (
+                          <Text style={estilos.comentario}>“{cita.calificacion.comentario}”</Text>
+                        ) : null}
+                      </>
+                    ) : (
+                      <Text style={estilos.sinCalificar}>El cliente aún no ha calificado</Text>
+                    )}
+                  </View>
+                ) : null}
               </Pressable>
             );
           })
@@ -178,9 +200,7 @@ const estilos = StyleSheet.create({
   textoChipActivo: { color: '#ffffff' },
 
   lista: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 24 },
-  filaCita: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  tarjetaCita: {
     backgroundColor: colores.tarjeta,
     borderRadius: 14,
     borderWidth: 1,
@@ -188,6 +208,18 @@ const estilos = StyleSheet.create({
     padding: 12,
     marginBottom: 10,
   },
+  filaCita: { flexDirection: 'row', alignItems: 'center' },
+
+  bloqueCalificacion: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: colores.borde,
+  },
+  filaEstrellas: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  textoCalificacion: { fontSize: 12, fontWeight: '700', color: '#b45309' },
+  comentario: { fontSize: 13, color: colores.texto, fontStyle: 'italic', marginTop: 4 },
+  sinCalificar: { fontSize: 12, color: colores.textoSuave },
   columnaHora: { width: 52 },
   hora: { fontSize: 13, fontWeight: '700', color: colores.texto },
   fecha: { fontSize: 10, color: colores.textoSuave, marginTop: 2 },

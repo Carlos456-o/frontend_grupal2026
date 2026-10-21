@@ -11,14 +11,16 @@
 // para no repetir esa información en cada pantalla.
 // ===================================================================
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { buscarUsuario } from './firebase/usuarios';
+import { escucharCitasDeCliente, marcarAvisoVisto } from './firebase/citas';
 
 import MenuInferior from './componentes/MenuInferior';
+import AvisoCarroListo from './componentes/AvisoCarroListo';
 import { colores } from './estilos/colores';
 
 // Pantallas
@@ -49,6 +51,7 @@ import ListaClientes from './pantallas/ListaClientes';
 import DetalleCliente from './pantallas/DetalleCliente';
 import PerfilAdmin from './pantallas/PerfilAdmin';
 import Mas from './pantallas/Mas';
+import Calificaciones from './pantallas/Calificaciones';
 
 // Botones del menú de abajo, uno por cada rol.
 const MENU_CLIENTE = [
@@ -78,6 +81,30 @@ export default function App() {
   const [parametros, setParametros] = useState({});
   // "usuario" guarda quién inició sesión (o null si nadie ha entrado).
   const [usuario, setUsuario] = useState(null);
+  // Citas del cliente que acaban de terminar y cuyo aviso aún no ha visto.
+  const [citasListas, setCitasListas] = useState([]);
+
+  // Mientras un cliente tiene la sesión abierta, escuchamos sus citas en
+  // tiempo real: si una pasa a "terminado", le mostramos el aviso de que su
+  // carro está listo (sin importar en qué pantalla esté).
+  const clienteId = usuario?.rol === 'cliente' ? usuario.perfil.id : null;
+  useEffect(() => {
+    if (!clienteId) {
+      setCitasListas([]);
+      return undefined;
+    }
+    const dejarDeEscuchar = escucharCitasDeCliente(clienteId, (citas) => {
+      setCitasListas(citas.filter((c) => c.estado === 'terminado' && !c.avisoListoVisto && !c.calificacion));
+    });
+    return dejarDeEscuchar;
+  }, [clienteId]);
+
+  function alCerrarAviso() {
+    const cita = citasListas[0];
+    // Lo quitamos de inmediato; Firebase lo guarda en segundo plano.
+    setCitasListas((anteriores) => anteriores.slice(1));
+    marcarAvisoVisto(cita.id).catch(() => {});
+  }
 
   // Cambia de pantalla. Es la función que le pasamos a todas las
   // pantallas para que puedan "navegar" a otra.
@@ -195,6 +222,8 @@ export default function App() {
         return <PerfilAdmin {...propsComunes} />;
       case 'adminMas':
         return <Mas {...propsComunes} />;
+      case 'adminCalificaciones':
+        return <Calificaciones {...propsComunes} />;
 
       default:
         return <IniciarSesion iniciarSesion={iniciarSesion} navegarA={navegarA} />;
@@ -220,6 +249,7 @@ export default function App() {
         {menuOpciones ? (
           <MenuInferior opciones={menuOpciones} pantallaActiva={pantalla} alCambiarPantalla={navegarA} />
         ) : null}
+        <AvisoCarroListo cita={citasListas[0] ?? null} alCerrar={alCerrarAviso} />
       </SafeAreaView>
     </SafeAreaProvider>
   );

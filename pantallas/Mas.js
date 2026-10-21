@@ -6,13 +6,21 @@ import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { obtenerEmpleados } from '../firebase/empleados';
 import { obtenerClientes } from '../firebase/clientes';
+import { obtenerCalificaciones } from '../firebase/citas';
 import { useDatos } from '../firebase/utilidades';
 import Encabezado from '../componentes/Encabezado';
 import { colores } from '../estilos/colores';
 
 async function contarPersonas() {
-  const [empleados, clientes] = await Promise.all([obtenerEmpleados(), obtenerClientes()]);
-  return { empleados: empleados.length, clientes: clientes.length };
+  const [empleados, clientes, calificaciones] = await Promise.all([
+    obtenerEmpleados(),
+    obtenerClientes(),
+    obtenerCalificaciones(),
+  ]);
+  const promedio = calificaciones.length
+    ? calificaciones.reduce((suma, c) => suma + c.calificacion.estrellas, 0) / calificaciones.length
+    : 0;
+  return { empleados: empleados.length, clientes: clientes.length, calificaciones: calificaciones.length, promedio };
 }
 
 export default function Mas({ usuario, navegarA, cerrarSesion }) {
@@ -34,6 +42,18 @@ export default function Mas({ usuario, navegarA, cerrarSesion }) {
       colorFondo: '#fce7f3',
       color: '#db2777',
       alPresionar: () => navegarA('adminClientes'),
+    },
+    {
+      titulo: 'Calificaciones',
+      subtitulo: !datos
+        ? '…'
+        : datos.calificaciones
+          ? `★ ${datos.promedio.toFixed(1)} · ${datos.calificaciones} opiniones`
+          : 'Aún no hay calificaciones',
+      icono: 'star-outline',
+      colorFondo: '#fef3c7',
+      color: '#d97706',
+      alPresionar: () => navegarA('adminCalificaciones'),
     },
     {
       titulo: 'Mi perfil',

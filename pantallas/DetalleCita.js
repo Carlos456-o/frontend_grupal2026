@@ -12,6 +12,8 @@ import InsigniaEstado from '../componentes/InsigniaEstado';
 import Boton from '../componentes/Boton';
 import SinResultados from '../componentes/SinResultados';
 import Cargando from '../componentes/Cargando';
+import Estrellas from '../componentes/Estrellas';
+import FormularioCalificacion from '../componentes/FormularioCalificacion';
 import { colores } from '../estilos/colores';
 
 // Trae la cita y el empleado que la atiende.
@@ -64,9 +66,38 @@ export default function DetalleCita({ parametros, navegarA }) {
         </Tarjeta>
       </View>
 
+      {/* Cuando la cita terminó, el cliente puede calificarla aquí (si no lo hizo en el aviso). */}
+      {cita.estado === 'terminado' ? (
+        <View style={estilos.seccion}>
+          <Tarjeta>
+            {cita.calificacion ? (
+              <View>
+                <Text style={estilos.etiqueta}>Tu calificación</Text>
+                <View style={{ marginTop: 6 }}>
+                  <Estrellas valor={cita.calificacion.estrellas} tamano={20} />
+                </View>
+                {cita.calificacion.comentario ? (
+                  <Text style={[estilos.valor, { marginTop: 8 }]}>“{cita.calificacion.comentario}”</Text>
+                ) : null}
+              </View>
+            ) : (
+              <FormularioCalificacion cita={cita} alTerminar={recargar} />
+            )}
+          </Tarjeta>
+        </View>
+      ) : null}
+
       <View style={estilos.seccion}>
         {cita.estado === 'pendiente' || cita.estado === 'confirmada' ? (
-          <Boton texto="Cancelar cita" tipo="peligro" alPresionar={alCancelar} />
+          <>
+            <Boton
+              texto="Reprogramar"
+              tipo="borde"
+              alPresionar={() => navegarA('clienteAgendarCita', { citaId: cita.id })}
+              estilo={{ marginBottom: 10 }}
+            />
+            <Boton texto="Cancelar cita" tipo="peligro" alPresionar={alCancelar} />
+          </>
         ) : null}
         <Boton texto="Volver" tipo="borde" alPresionar={() => navegarA('clienteCitas')} estilo={{ marginTop: 10 }} />
       </View>

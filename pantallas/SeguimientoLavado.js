@@ -4,16 +4,18 @@
 // "Citas de hoy"). Los pasos son las "actividades_incluidas" del servicio
 // de la cita en Firebase.
 //
-// Los pasos marcados solo viven en la pantalla (Firebase no los guarda);
-// lo que sí se guarda es el estado de la cita: "en_proceso" al iniciar
-// y "terminado" al finalizar.
+// Todo se guarda en la cita de Firebase: los pasos marcados (campo "pasos")
+// y el estado: "en_proceso" al iniciar y "terminado" al finalizar.
+//
+// El administrador además ve un panel para confirmar la cita, asignarle
+// un empleado, cancelarla o eliminarla.
 
 import { useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { obtenerCita, cambiarEstadoCita } from '../firebase/citas';
+import { obtenerCita, cambiarEstadoCita, guardarPasos, asignarEmpleado, eliminarCita } from '../firebase/citas';
 import { obtenerCliente } from '../firebase/clientes';
-import { obtenerEmpleado } from '../firebase/empleados';
+import { obtenerEmpleado, obtenerEmpleados } from '../firebase/empleados';
 import { obtenerServicio } from '../firebase/servicios';
 import { useDatos } from '../firebase/utilidades';
 import Tarjeta from '../componentes/Tarjeta';
@@ -32,22 +34,28 @@ function horaActual() {
 }
 
 // Trae la cita y todo lo relacionado (cliente, empleado y servicio).
-async function cargarSeguimiento(citaId) {
+// Al admin también le traemos la lista de empleados para poder asignar uno.
+async function cargarSeguimiento(citaId, esAdmin) {
   const cita = await obtenerCita(citaId);
   if (!cita) return { cita: null };
-  const [cliente, empleado, servicio] = await Promise.all([
+  const [cliente, empleado, servicio, empleados] = await Promise.all([
     obtenerCliente(cita.clienteId),
     obtenerEmpleado(cita.empleadoId),
     obtenerServicio(cita.servicio.id),
+    esAdmin ? obtenerEmpleados() : Promise.resolve([]),
   ]);
-  return { cita, cliente, empleado, servicio };
+  return { cita, cliente, empleado, servicio, empleados };
 }
 
 export default function SeguimientoLavado({ usuario, parametros, navegarA }) {
-  const { datos, cargando, error, recargar } = useDatos(() => cargarSeguimiento(parametros.citaId), [parametros.citaId]);
+  const esAdmin = usuario?.rol === 'admin';
+  const { datos, cargando, error, recargar } = useDatos(
+    () => cargarSeguimiento(parametros.citaId, esAdmin),
+    [parametros.citaId, esAdmin]
+  );
 
   function alVolver() {
-    navegarA(usuario?.rol === 'admin' ? 'adminCitas' : 'empleadoCitas');
+    navegarA(esAdmin ? 'adminCitas' : 'empleadoCitas');
   }
 
   return (
@@ -67,28 +75,54 @@ export default function SeguimientoLavado({ usuario, parametros, navegarA }) {
       ) : !datos.cita ? (
         <SinResultados texto="Cita no encontrada" />
       ) : (
-        <Seguimiento {...datos} alCambiarEstado={recargar} />
+        // "key" con el estado: al recargar tras un cambio, los pasos se vuelven a leer de Firebase.
+        <Seguimiento
+          key={`${datos.cita.id}-${datos.cita.estado}`}
+          {...datos}
+          esAdmin={esAdmin}
+          alCambiarEstado={recargar}
+          alEliminar={alVolver}
+        />
       )}
     </View>
   );
 }
 
-// Se dibuja cuando ya tenemos los datos, así los pasos arrancan con las
-// actividades correctas del servicio.
-function Seguimiento({ cita, cliente, empleado, servicio, alCambiarEstado }) {
+// Pasos con los que arranca la pantalla: los guardados en la cita si existen;
+// si no, las actividades del servicio (marcadas si la cita ya terminó).
+function pasosIniciales(cita, servicio) {
   const nombresPasos = servicio?.actividades?.length ? servicio.actividades : PASOS_POR_DEFECTO;
   const yaTerminada = cita.estado === 'terminado';
-  const [pasos, setPasos] = useState(
-    nombresPasos.map((nombre) => ({ nombre, hecho: yaTerminada, hora: null }))
-  );
+  return nombresPasos.map((nombre) => {
+    const guardado = cita.pasos.find((p) => p.nombre === nombre);
+    return guardado ?? { nombre, hecho: yaTerminada, hora: null };
+  });
+}
+
+// Se dibuja cuando ya tenemos los datos, así los pasos arrancan con las
+// actividades correctas del servicio.
+function Seguimiento({ cita, cliente, empleado, servicio, empleados, esAdmin, alCambiarEstado, alEliminar }) {
+  const [pasos, setPasos] = useState(() => pasosIniciales(cita, servicio));
   const [guardando, setGuardando] = useState(false);
 
   const pasosCompletados = pasos.filter((p) => p.hecho).length;
+  // Solo se marcan pasos mientras se está lavando.
+  const puedeMarcarPasos = cita.estado === 'en_proceso';
 
-  function alternarPaso(indice, hecho) {
-    setPasos((anteriores) =>
-      anteriores.map((paso, i) => (i === indice ? { ...paso, hecho, hora: hecho ? horaActual() : null } : paso))
-    );
+  async function alternarPaso(indice, hecho) {
+    if (!puedeMarcarPasos) {
+      Alert.alert('Lavado no iniciado', 'Primero toca "Iniciar lavado" para marcar los pasos.');
+      return;
+    }
+    const anteriores = pasos;
+    const nuevos = pasos.map((paso, i) => (i === indice ? { ...paso, hecho, hora: hecho ? horaActual() : null } : paso));
+    setPasos(nuevos);
+    try {
+      await guardarPasos(cita.id, nuevos);
+    } catch (e) {
+      setPasos(anteriores);
+      Alert.alert('Error', 'No se pudo guardar el paso. Intenta de nuevo.');
+    }
   }
 
   async function cambiarEstado(estado) {
@@ -101,6 +135,43 @@ function Seguimiento({ cita, cliente, empleado, servicio, alCambiarEstado }) {
       Alert.alert('Error', 'No se pudo actualizar la cita. Intenta de nuevo.');
     }
     setGuardando(false);
+  }
+
+  async function alAsignar(empleadoId) {
+    if (guardando || empleadoId === cita.empleadoId) return;
+    setGuardando(true);
+    try {
+      await asignarEmpleado(cita.id, empleadoId);
+      alCambiarEstado();
+    } catch (e) {
+      Alert.alert('Error', 'No se pudo asignar el empleado. Intenta de nuevo.');
+    }
+    setGuardando(false);
+  }
+
+  function alCancelar() {
+    Alert.alert('Cancelar cita', '¿Seguro que deseas cancelar esta cita?', [
+      { text: 'No', style: 'cancel' },
+      { text: 'Sí, cancelar', style: 'destructive', onPress: () => cambiarEstado('cancelada') },
+    ]);
+  }
+
+  function alEliminarCita() {
+    Alert.alert('Eliminar cita', 'Se borrará de Firebase y no se puede deshacer.', [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Sí, eliminar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await eliminarCita(cita.id);
+            alEliminar();
+          } catch (e) {
+            Alert.alert('Error', 'No se pudo eliminar la cita. Intenta de nuevo.');
+          }
+        },
+      },
+    ]);
   }
 
   function alTerminar() {
@@ -144,6 +215,18 @@ function Seguimiento({ cita, cliente, empleado, servicio, alCambiarEstado }) {
           <Text style={estilos.etiquetaSolicitud}>Solicitud especial</Text>
           <Text style={estilos.textoSolicitud}>{cita.solicitudEspecial}</Text>
         </Tarjeta>
+      ) : null}
+
+      {esAdmin ? (
+        <PanelAdmin
+          cita={cita}
+          empleados={empleados}
+          guardando={guardando}
+          alConfirmar={() => cambiarEstado('confirmada')}
+          alAsignar={alAsignar}
+          alCancelar={alCancelar}
+          alEliminar={alEliminarCita}
+        />
       ) : null}
 
       <Text style={estilos.tituloSeccion}>Pasos del servicio</Text>
@@ -192,7 +275,61 @@ function Seguimiento({ cita, cliente, empleado, servicio, alCambiarEstado }) {
   );
 }
 
+// Acciones que solo puede hacer el administrador sobre la cita.
+function PanelAdmin({ cita, empleados, guardando, alConfirmar, alAsignar, alCancelar, alEliminar }) {
+  const activa = !['terminado', 'cancelada'].includes(cita.estado);
+
+  return (
+    <View>
+      <Text style={estilos.tituloSeccion}>Empleado asignado</Text>
+      {empleados.length === 0 ? (
+        <Text style={estilos.aviso}>No hay empleados registrados.</Text>
+      ) : (
+        <View style={estilos.filaChips}>
+          {empleados.map((e) => {
+            const elegido = e.id === cita.empleadoId;
+            return (
+              <Pressable
+                key={e.id}
+                disabled={!activa}
+                onPress={() => alAsignar(e.id)}
+                style={[estilos.chip, elegido && estilos.chipElegido, !activa && !elegido && { opacity: 0.5 }]}
+              >
+                <Text style={[estilos.textoChip, elegido && estilos.textoChipElegido]}>{e.nombre}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+
+      {cita.estado === 'pendiente' ? (
+        <Boton
+          texto={guardando ? 'Guardando...' : 'Confirmar cita'}
+          alPresionar={alConfirmar}
+          estilo={estilos.botonEstado}
+        />
+      ) : null}
+      {activa ? <Boton texto="Cancelar cita" tipo="peligro" alPresionar={alCancelar} estilo={{ marginTop: 10 }} /> : null}
+      <Boton texto="Eliminar cita" tipo="borde" alPresionar={alEliminar} estilo={{ marginTop: 10 }} />
+    </View>
+  );
+}
+
 const estilos = StyleSheet.create({
+  aviso: { fontSize: 13, color: colores.textoSuave, marginBottom: 10 },
+  filaChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 6 },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colores.borde,
+    backgroundColor: colores.tarjeta,
+  },
+  chipElegido: { backgroundColor: '#132048', borderColor: '#132048' },
+  textoChip: { fontSize: 13, fontWeight: '600', color: colores.textoSuave },
+  textoChipElegido: { color: '#ffffff' },
+
   contenedor: { flex: 1, backgroundColor: colores.tarjeta },
 
   encabezado: {

@@ -54,8 +54,8 @@ export default function MisCitas({ usuario, navegarA }) {
     ]);
   }
 
-  function alReprogramar() {
-    Alert.alert('Próximamente', 'Pronto podrás elegir una nueva fecha y hora para tu cita.');
+  function alReprogramar(cita) {
+    navegarA('clienteAgendarCita', { citaId: cita.id });
   }
 
   return (
@@ -106,7 +106,7 @@ export default function MisCitas({ usuario, navegarA }) {
                 {pestana === 'proximas' ? (
                   cita.estado === 'pendiente' ? (
                     <View style={estilos.filaBotones}>
-                      <Boton texto="Reprogramar" tipo="borde" alPresionar={alReprogramar} estilo={estilos.botonMitad} />
+                      <Boton texto="Reprogramar" tipo="borde" alPresionar={() => alReprogramar(cita)} estilo={estilos.botonMitad} />
                       <Boton texto="Cancelar" tipo="peligro" alPresionar={() => alCancelar(cita)} estilo={estilos.botonMitad} />
                     </View>
                   ) : (

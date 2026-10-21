@@ -5,15 +5,20 @@
 //
 // Las 4 fechas se calculan solas a partir de hoy (hoy, mañana, pasado...),
 // y una hora aparece tachada si ya hay otra cita a esa misma hora ese día.
+//
+// Si llega "parametros.citaId" la pantalla funciona en modo REPROGRAMAR:
+// carga esa cita, rellena el formulario y al confirmar la actualiza en
+// Firebase en vez de crear una nueva.
 
 import { useState } from 'react';
 import { View, Text, ScrollView, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { obtenerCliente } from '../firebase/clientes';
-import { obtenerCitasDeFecha, crearCita } from '../firebase/citas';
+import { obtenerCita, obtenerCitasDeFecha, crearCita, reprogramarCita, ERROR_HORA_OCUPADA } from '../firebase/citas';
 import { useDatos, hoyISO } from '../firebase/utilidades';
 import Tarjeta from '../componentes/Tarjeta';
 import SinResultados from '../componentes/SinResultados';
+import Cargando from '../componentes/Cargando';
 import { colores } from '../estilos/colores';
 
 const NOMBRES_DIA = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
@@ -35,13 +40,30 @@ function generarProximosDias(cantidad) {
 const HORAS = ['08:30', '09:00', '10:00', '10:30', '11:00', '11:30', '13:00', '14:00', '15:00', '16:00', '16:30'];
 
 export default function AgendarCita({ usuario, parametros, navegarA }) {
-  const servicio = parametros.servicio;
+  const citaId = parametros.citaId ?? null;
+  const { datos: citaOriginal, cargando, error, recargar } = useDatos(
+    () => (citaId ? obtenerCita(citaId) : Promise.resolve(null)),
+    [citaId]
+  );
+
+  if (citaId && (cargando || error)) return <Cargando error={error} alReintentar={recargar} />;
+  if (citaId && !citaOriginal) return <SinResultados texto="Cita no encontrada" />;
+
+  // "key" hace que el formulario arranque de cero si cambia la cita.
+  return <FormularioCita key={citaId ?? 'nueva'} usuario={usuario} parametros={parametros} navegarA={navegarA} citaOriginal={citaOriginal} />;
+}
+
+function FormularioCita({ usuario, parametros, navegarA, citaOriginal }) {
+  const esReprogramar = Boolean(citaOriginal);
+  const servicio = citaOriginal?.servicio ?? parametros.servicio;
 
   const dias = generarProximosDias(4);
-  const [fechaElegida, setFechaElegida] = useState(dias[0].clave);
-  const [horaElegida, setHoraElegida] = useState(null);
-  const [placaElegida, setPlacaElegida] = useState(null);
-  const [solicitud, setSolicitud] = useState('');
+  // Al reprogramar mantenemos la fecha original si todavía está entre los días disponibles.
+  const fechaInicial = dias.some((d) => d.clave === citaOriginal?.fecha) ? citaOriginal.fecha : dias[0].clave;
+  const [fechaElegida, setFechaElegida] = useState(fechaInicial);
+  const [horaElegida, setHoraElegida] = useState(fechaInicial === citaOriginal?.fecha ? citaOriginal.hora : null);
+  const [placaElegida, setPlacaElegida] = useState(citaOriginal?.vehiculo.placa ?? null);
+  const [solicitud, setSolicitud] = useState(citaOriginal?.solicitudEspecial ?? '');
   const [guardando, setGuardando] = useState(false);
 
   // Traemos el cliente de nuevo por si agregó vehículos después de iniciar sesión.
@@ -50,7 +72,15 @@ export default function AgendarCita({ usuario, parametros, navegarA }) {
   const vehiculo = vehiculos.find((v) => v.placa === placaElegida) ?? vehiculos[0];
 
   const { datos: citasDelDia } = useDatos(() => obtenerCitasDeFecha(fechaElegida), [fechaElegida]);
-  const horasOcupadas = (citasDelDia ?? []).filter((c) => c.estado !== 'cancelada').map((c) => c.hora);
+  // La propia cita que se reprograma no cuenta como ocupada.
+  const horasOcupadas = (citasDelDia ?? [])
+    .filter((c) => c.estado !== 'cancelada' && c.id !== citaOriginal?.id)
+    .map((c) => c.hora);
+
+  function alVolver() {
+    if (esReprogramar) navegarA('clienteCitas');
+    else navegarA('clienteCalculadora', { servicioId: servicio.id });
+  }
 
   if (!servicio) return <SinResultados texto="Primero elige un servicio" />;
 
@@ -72,33 +102,41 @@ export default function AgendarCita({ usuario, parametros, navegarA }) {
 
     setGuardando(true);
     try {
-      await crearCita({
-        clienteId: usuario.perfil.id,
-        empleadoId: null,
+      const datosCita = {
         fecha: fechaElegida,
         hora: horaElegida,
-        servicio,
         vehiculo: { placa: vehiculo.placa, modelo: vehiculo.modelo },
         solicitudEspecial: solicitud.trim(),
-      });
+      };
+      if (esReprogramar) {
+        await reprogramarCita(citaOriginal.id, datosCita);
+      } else {
+        await crearCita({ ...datosCita, clienteId: usuario.perfil.id, empleadoId: null, servicio });
+      }
     } catch (e) {
       setGuardando(false);
-      Alert.alert('Error', 'No se pudo agendar la cita. Intenta de nuevo.');
+      if (e.message === ERROR_HORA_OCUPADA) {
+        Alert.alert('Hora no disponible', 'Alguien acaba de tomar esa hora. Elige otra.');
+      } else {
+        Alert.alert('Error', 'No se pudo guardar la cita. Intenta de nuevo.');
+      }
       return;
     }
 
-    Alert.alert('Cita agendada', 'Tu cita ha sido registrada correctamente.', [
-      { text: 'OK', onPress: () => navegarA('clienteCitas') },
-    ]);
+    Alert.alert(
+      esReprogramar ? 'Cita reprogramada' : 'Cita agendada',
+      esReprogramar ? 'Tu cita quedó con la nueva fecha y hora.' : 'Tu cita ha sido registrada correctamente.',
+      [{ text: 'OK', onPress: () => navegarA('clienteCitas') }]
+    );
   }
 
   return (
     <View style={estilos.contenedor}>
       <View style={estilos.encabezado}>
-        <Pressable onPress={() => navegarA('clienteCalculadora', { servicioId: servicio.id })} style={estilos.botonAtras}>
+        <Pressable onPress={alVolver} style={estilos.botonAtras}>
           <Ionicons name="chevron-back" size={26} color={colores.texto} />
         </Pressable>
-        <Text style={estilos.titulo}>Agendar cita</Text>
+        <Text style={estilos.titulo}>{esReprogramar ? 'Reprogramar cita' : 'Agendar cita'}</Text>
       </View>
 
       <ScrollView style={estilos.contenido} contentContainerStyle={estilos.contenidoInterno}>
@@ -113,12 +151,12 @@ export default function AgendarCita({ usuario, parametros, navegarA }) {
               {servicio.duracionMinutos != null ? `${servicio.duracionMinutos} min · ` : ''}C${servicio.precio}
             </Text>
           </View>
-          <Text
-            style={estilos.enlaceCambiar}
-            onPress={() => navegarA('clienteCalculadora', { servicioId: servicio.id })}
-          >
-            Cambiar
-          </Text>
+          {/* Al reprogramar el servicio se mantiene: solo cambian fecha, hora y vehículo. */}
+          {esReprogramar ? null : (
+            <Text style={estilos.enlaceCambiar} onPress={alVolver}>
+              Cambiar
+            </Text>
+          )}
         </Tarjeta>
 
         <Text style={estilos.tituloSeccion}>Vehículo</Text>
@@ -187,7 +225,9 @@ export default function AgendarCita({ usuario, parametros, navegarA }) {
       </ScrollView>
 
       <Pressable onPress={alConfirmar} style={estilos.barraTotal}>
-        <Text style={estilos.etiquetaTotal}>{guardando ? 'Agendando...' : 'Confirmar · Total'}</Text>
+        <Text style={estilos.etiquetaTotal}>
+          {guardando ? 'Guardando...' : esReprogramar ? 'Guardar cambios · Total' : 'Confirmar · Total'}
+        </Text>
         <Text style={estilos.valorTotal}>C${servicio.precio}</Text>
       </Pressable>
     </View>
