@@ -1,36 +1,33 @@
 // PANTALLA: Iniciar sesión
 // Es la primera pantalla que ve cualquier persona al abrir la app.
-// Pide teléfono y contraseña, y usa la función "iniciarSesion" que viene
-// de App.js (ahí es donde se revisan los datos contra la colección "usuarios" de Firebase).
+// Pide correo o teléfono y la contraseña, y usa la función "iniciarSesion"
+// que viene de App.js (ahí se revisan con Firebase Authentication).
 //
-// El selector "Cliente / Empleado / Administrador" de arriba es solo para
-// saber qué tipo de cuenta esperamos: si eliges una pestaña que no
-// corresponde con el teléfono, App.js te va a avisar que te equivocaste.
+// No hay que elegir si eres cliente, empleado o administrador: la app lo
+// sabe por tu cuenta y te lleva a tu pantalla de inicio.
 
 import { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import CampoTexto from '../componentes/CampoTexto';
 import Boton from '../componentes/Boton';
 import { colores, degradados } from '../estilos/colores';
 
-const TIPOS_CUENTA = [
-  { clave: 'cliente', texto: 'Cliente' },
-  { clave: 'empleado', texto: 'Empleado' },
-  { clave: 'administrador', texto: 'Administrador' },
-];
-
 export default function IniciarSesion({ iniciarSesion, navegarA }) {
-  const [tipoCuenta, setTipoCuenta] = useState('cliente'); // "cliente" | "empleado" | "administrador"
-  const [telefono, setTelefono] = useState('');
+  const [identificador, setIdentificador] = useState(''); // correo o teléfono
   const [contrasena, setContrasena] = useState('');
   const [error, setError] = useState('');
   const [cargando, setCargando] = useState(false);
 
   async function alPresionarIngresar() {
     if (cargando) return;
+    if (!identificador.trim() || !contrasena) {
+      setError('Escribe tu correo o teléfono y tu contraseña.');
+      return;
+    }
     setCargando(true);
-    const resultado = await iniciarSesion(telefono.trim(), contrasena, tipoCuenta);
+    setError('');
+    const resultado = await iniciarSesion(identificador.trim(), contrasena);
     // Si el login salió bien, esta pantalla ya se cerró y no hay que tocar su estado.
     if (!resultado.ok) {
       setError(resultado.error);
@@ -60,29 +57,17 @@ export default function IniciarSesion({ iniciarSesion, navegarA }) {
 
         {/* --- Tarjeta blanca que tapa la parte de abajo del degradado --- */}
         <View style={estilos.tarjeta}>
-          <View style={estilos.selector}>
-            {TIPOS_CUENTA.map((tipo) => (
-              <Pressable
-                key={tipo.clave}
-                style={[estilos.opcionSelector, tipoCuenta === tipo.clave && estilos.opcionSelectorActiva]}
-                onPress={() => setTipoCuenta(tipo.clave)}
-              >
-                <Text style={[estilos.textoSelector, tipoCuenta === tipo.clave && estilos.textoSelectorActivo]}>
-                  {tipo.texto}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-
           <Text style={estilos.bienvenida}>Bienvenido de nuevo</Text>
           <Text style={estilos.subBienvenida}>Inicia sesión para agendar tu lavado</Text>
 
           <CampoTexto
             etiqueta="Correo o teléfono"
-            placeholder="Ej. 0981112233"
-            keyboardType="phone-pad"
-            valor={telefono}
-            alCambiar={setTelefono}
+            placeholder="Ej. andrea@gmail.com o 88123456"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            valor={identificador}
+            alCambiar={setIdentificador}
           />
           <CampoTexto
             etiqueta="Contraseña"
@@ -92,7 +77,7 @@ export default function IniciarSesion({ iniciarSesion, navegarA }) {
             alCambiar={setContrasena}
           />
 
-          <Text style={estilos.olvidaste} onPress={() => setError('Pídele ayuda a un administrador para recuperarla.')}>
+          <Text style={estilos.olvidaste} onPress={() => navegarA('recuperarContrasena')}>
             ¿Olvidaste tu contraseña?
           </Text>
 
@@ -161,25 +146,6 @@ const estilos = StyleSheet.create({
     paddingTop: 24,
     paddingBottom: 32,
   },
-  selector: {
-    flexDirection: 'row',
-    backgroundColor: colores.fondoTab,
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 20,
-  },
-  opcionSelector: { flex: 1, paddingVertical: 9, borderRadius: 9, alignItems: 'center' },
-  opcionSelectorActiva: {
-    backgroundColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  textoSelector: { fontSize: 12, fontWeight: '600', color: colores.textoSuave },
-  textoSelectorActivo: { color: colores.texto },
-
   bienvenida: { fontSize: 20, fontWeight: '800', color: colores.texto },
   subBienvenida: { fontSize: 13, color: colores.textoSuave, marginTop: 4, marginBottom: 20 },
 

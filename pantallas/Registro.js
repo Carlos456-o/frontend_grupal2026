@@ -2,16 +2,18 @@
 // Formulario para crear una cuenta nueva de cliente, dividido en 2 pasos
 // para que no se vea todo amontonado:
 //   Paso 1: datos del cliente  -> colección "clientes" (nombre, telefono, email)
-//   Paso 2: datos de la cuenta -> colección "usuarios" (telefono, contrasena, rol)
+//   Paso 2: la contraseña      -> cuenta en Firebase Authentication
 //
 // Usamos una variable de estado "paso" (1 o 2) para saber cuál de los
-// dos bloques mostrar. Al final se crean los dos documentos en Firebase.
+// dos bloques mostrar. Al final se crea la cuenta y sus documentos
+// (ver registrarCliente en firebase/autenticacion.js).
+// El correo es obligatorio: ahí llega el enlace si olvida la contraseña.
 // El vehículo NO se pide aquí: el cliente lo agrega después dentro de la app.
 
 import { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, Alert, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { registrarCliente, telefonoRegistrado } from '../firebase/usuarios';
+import { registrarCliente, esCorreo, mensajeDeError, LARGO_MINIMO_CONTRASENA } from '../firebase/autenticacion';
 import CampoTexto from '../componentes/CampoTexto';
 import Boton from '../componentes/Boton';
 import { colores, degradados } from '../estilos/colores';
@@ -35,12 +37,12 @@ export default function Registro({ navegarA }) {
   }
 
   function alPresionarSiguiente() {
-    if (!nombre.trim() || !telefono.trim()) {
-      Alert.alert('Datos incompletos', 'Completa al menos tu nombre y tu teléfono.');
+    if (!nombre.trim() || !telefono.trim() || !correo.trim()) {
+      Alert.alert('Datos incompletos', 'Completa tu nombre, tu teléfono y tu correo.');
       return;
     }
-    if (correo.trim() && !/^\S+@\S+\.\S+$/.test(correo.trim())) {
-      Alert.alert('Correo inválido', 'Revisa tu correo o déjalo vacío.');
+    if (!esCorreo(correo.trim())) {
+      Alert.alert('Correo inválido', 'Revisa tu correo. Lo necesitas para recuperar tu contraseña.');
       return;
     }
     setPaso(2);
@@ -48,8 +50,8 @@ export default function Registro({ navegarA }) {
 
   async function alPresionarCrearCuenta() {
     if (guardando) return;
-    if (!contrasena || contrasena.length < 4) {
-      Alert.alert('Contraseña muy corta', 'Usa al menos 4 caracteres.');
+    if (!contrasena || contrasena.length < LARGO_MINIMO_CONTRASENA) {
+      Alert.alert('Contraseña muy corta', `Usa al menos ${LARGO_MINIMO_CONTRASENA} caracteres.`);
       return;
     }
     if (contrasena !== confirmarContrasena) {
@@ -59,11 +61,7 @@ export default function Registro({ navegarA }) {
 
     setGuardando(true);
     try {
-      if (await telefonoRegistrado(telefono.trim())) {
-        setGuardando(false);
-        Alert.alert('Teléfono en uso', 'Ya existe una cuenta con ese teléfono. Inicia sesión.');
-        return;
-      }
+      // También revisa que el teléfono y el correo no estén usados.
       await registrarCliente({
         nombre: nombre.trim(),
         telefono: telefono.trim(),
@@ -72,7 +70,7 @@ export default function Registro({ navegarA }) {
       });
     } catch (e) {
       setGuardando(false);
-      Alert.alert('Error', 'No se pudo crear la cuenta. Intenta de nuevo.');
+      Alert.alert('No se pudo crear la cuenta', mensajeDeError(e.message));
       return;
     }
 
@@ -82,7 +80,7 @@ export default function Registro({ navegarA }) {
   }
 
   // Qué tan "segura" se ve la contraseña, solo por longitud (0 a 3).
-  const nivelSeguridad = contrasena.length === 0 ? 0 : contrasena.length < 4 ? 1 : contrasena.length < 6 ? 2 : 3;
+  const nivelSeguridad = contrasena.length === 0 ? 0 : contrasena.length < 6 ? 1 : contrasena.length < 10 ? 2 : 3;
   const textoSeguridad = ['', 'Floja', 'Media', 'Segura'][nivelSeguridad];
   const colorSeguridad = ['', colores.peligro, '#d97706', colores.exito][nivelSeguridad];
 
@@ -132,7 +130,15 @@ export default function Registro({ navegarA }) {
             <Text style={estilos.tituloSeccion}>Datos personales</Text>
             <CampoTexto etiqueta="Nombre completo" valor={nombre} alCambiar={setNombre} />
             <CampoTexto etiqueta="Número de teléfono" keyboardType="phone-pad" valor={telefono} alCambiar={setTelefono} />
-            <CampoTexto etiqueta="Correo electrónico" keyboardType="email-address" autoCapitalize="none" valor={correo} alCambiar={setCorreo} />
+            <CampoTexto
+              etiqueta="Correo electrónico"
+              placeholder="Para recuperar tu contraseña"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              valor={correo}
+              alCambiar={setCorreo}
+            />
 
             <Boton texto="Siguiente" tipo="degradado" colorDegradado={degradados.registro} alPresionar={alPresionarSiguiente} />
           </View>
@@ -140,8 +146,9 @@ export default function Registro({ navegarA }) {
           <View>
             <Text style={[estilos.tituloSeccion, estilos.colorAzul]}>Datos de tu cuenta</Text>
             <View style={estilos.resumenCuenta}>
-              <Text style={estilos.etiquetaResumen}>Iniciarás sesión con</Text>
+              <Text style={estilos.etiquetaResumen}>Podrás iniciar sesión con</Text>
               <Text style={estilos.valorResumen}>📱 {telefono.trim()}</Text>
+              <Text style={estilos.valorResumen}>✉️ {correo.trim()}</Text>
               <Text style={estilos.notaResumen}>Tus vehículos los podrás agregar dentro de la app.</Text>
             </View>
 

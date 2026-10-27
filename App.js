@@ -16,7 +16,11 @@ import { View, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
-import { buscarUsuario } from './firebase/usuarios';
+import {
+  iniciarSesion as entrarConFirebase,
+  cerrarSesion as salirDeFirebase,
+  mensajeDeError,
+} from './firebase/autenticacion';
 import { escucharCitasDeCliente, marcarAvisoVisto } from './firebase/citas';
 
 import MenuInferior from './componentes/MenuInferior';
@@ -26,6 +30,10 @@ import { colores } from './estilos/colores';
 // Pantallas
 import IniciarSesion from './pantallas/IniciarSesion';
 import Registro from './pantallas/Registro';
+import RecuperarContrasena from './pantallas/RecuperarContrasena';
+import ReportarProblema from './pantallas/ReportarProblema';
+import Reportes from './pantallas/Reportes';
+import Promociones from './pantallas/Promociones';
 
 import InicioCliente from './pantallas/InicioCliente';
 import MisCitas from './pantallas/MisCitas';
@@ -113,46 +121,26 @@ export default function App() {
     setParametros(nuevosParametros);
   }
 
-  // Busca el usuario en la colección "usuarios" de Firebase y, si el teléfono y la
-  // contraseña coinciden, guarda la sesión y lo manda a su pantalla de inicio.
-  // "tipoCuenta" viene del selector "Cliente / Empleado / Administrador" del
-  // login: sirve para avisar si alguien intenta entrar por la pestaña equivocada.
-  async function iniciarSesion(telefono, contrasena, tipoCuenta) {
+  // Inicia sesión con Firebase Authentication (correo o teléfono + contraseña).
+  // El tipo de usuario (cliente, empleado o admin) NO lo elige la persona:
+  // viene de su cuenta en "usuarios/{uid}", y según eso va a su inicio.
+  async function iniciarSesion(identificador, contrasena) {
     let usuarioEncontrado;
     try {
-      usuarioEncontrado = await buscarUsuario(telefono, contrasena);
+      usuarioEncontrado = await entrarConFirebase(identificador, contrasena);
     } catch (e) {
-      return { ok: false, error: 'No se pudo conectar con el servidor. Intenta de nuevo.' };
-    }
-
-    if (!usuarioEncontrado) {
-      return { ok: false, error: 'Teléfono o contraseña incorrectos' };
-    }
-
-    const tipoCuentaPorRol = { cliente: 'cliente', empleado: 'empleado', admin: 'administrador' };
-    const NOMBRES_TIPO_CUENTA = { cliente: 'Cliente', empleado: 'Empleado', administrador: 'Administrador' };
-    const tipoCuentaReal = tipoCuentaPorRol[usuarioEncontrado.rol];
-    if (tipoCuentaReal !== tipoCuenta) {
-      return {
-        ok: false,
-        error: `Esta cuenta es de ${NOMBRES_TIPO_CUENTA[tipoCuentaReal] ?? usuarioEncontrado.rol}. Cambia a esa pestaña.`,
-      };
-    }
-
-    if (!usuarioEncontrado.perfil) {
-      return { ok: false, error: 'La cuenta no tiene un perfil de cliente o empleado. Avisa al administrador.' };
+      return { ok: false, error: mensajeDeError(e.message) };
     }
 
     setUsuario(usuarioEncontrado);
-
     if (usuarioEncontrado.rol === 'cliente') navegarA('clienteInicio');
     else if (usuarioEncontrado.rol === 'empleado') navegarA('empleadoInicio');
     else navegarA('adminInicio');
-
     return { ok: true };
   }
 
   function cerrarSesion() {
+    salirDeFirebase();
     setUsuario(null);
     navegarA('iniciarSesion');
   }
@@ -170,6 +158,8 @@ export default function App() {
         return <Registro navegarA={navegarA} />;
       case 'invitadoServicios':
         return <CatalogoServicios {...propsComunes} />;
+      case 'recuperarContrasena':
+        return <RecuperarContrasena navegarA={navegarA} />;
 
       // ---- Cliente ----
       case 'clienteInicio':
@@ -188,6 +178,8 @@ export default function App() {
         return <CatalogoServicios {...propsComunes} />;
       case 'clientePerfil':
         return <PerfilCliente {...propsComunes} />;
+      case 'clienteReportar':
+        return <ReportarProblema {...propsComunes} />;
 
       // ---- Empleado ----
       case 'empleadoInicio':
@@ -224,6 +216,10 @@ export default function App() {
         return <Mas {...propsComunes} />;
       case 'adminCalificaciones':
         return <Calificaciones {...propsComunes} />;
+      case 'adminPromociones':
+        return <Promociones {...propsComunes} />;
+      case 'adminReportes':
+        return <Reportes {...propsComunes} />;
 
       default:
         return <IniciarSesion iniciarSesion={iniciarSesion} navegarA={navegarA} />;

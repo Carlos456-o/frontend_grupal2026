@@ -2,12 +2,15 @@
 // Le muestra al administrador las citas de Firebase, de todos los clientes
 // y empleados: las de hoy o todas, con filtros por estado. Tocar una cita
 // lleva al "Seguimiento del lavado" para ver/actualizar sus pasos.
+//
+// Las citas y los clientes se escuchan en tiempo real: cuando un cliente
+// agenda, reprograma o cancela, la lista se actualiza sola.
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
-import { obtenerCitas } from '../firebase/citas';
-import { obtenerClientes } from '../firebase/clientes';
-import { useDatos, hoyISO } from '../firebase/utilidades';
+import { escucharCitas } from '../firebase/citas';
+import { escucharClientes } from '../firebase/clientes';
+import { hoyISO } from '../firebase/utilidades';
 import SinResultados from '../componentes/SinResultados';
 import Cargando from '../componentes/Cargando';
 import Estrellas from '../componentes/Estrellas';
@@ -25,19 +28,39 @@ const FILTROS = [
   { clave: 'terminado', texto: 'Terminadas' },
 ];
 
-async function cargarCitasYClientes() {
-  const [citas, clientes] = await Promise.all([obtenerCitas(), obtenerClientes()]);
-  return { citas, clientes };
-}
-
 export default function CitasDeHoy({ navegarA }) {
-  const [rango, setRango] = useState('hoy');
+  // Arranca en "Todas las fechas" para que se vean también las citas que
+  // los clientes agendan para días siguientes.
+  const [rango, setRango] = useState('todas');
   const [filtro, setFiltro] = useState('todas');
-  const { datos, cargando, error, recargar } = useDatos(cargarCitasYClientes);
-  const clientes = datos?.clientes ?? [];
+
+  const [citas, setCitas] = useState(null); // null = todavía cargando
+  const [clientes, setClientes] = useState([]);
+  const [error, setError] = useState('');
+  const [intento, setIntento] = useState(0); // al reintentar, vuelve a conectar
+
+  useEffect(() => {
+    setError('');
+    const dejarCitas = escucharCitas(
+      (lista) => {
+        setCitas(lista);
+        setError('');
+      },
+      () => setError('No se pudo conectar con el servidor. Intenta de nuevo.')
+    );
+    const dejarClientes = escucharClientes(setClientes);
+    // Al salir de la pantalla dejamos de escuchar.
+    return () => {
+      dejarCitas();
+      dejarClientes();
+    };
+  }, [intento]);
+
+  const cargando = citas === null && !error;
+  const recargar = () => setIntento((n) => n + 1);
 
   const hoy = hoyISO();
-  const citasDelRango = (datos?.citas ?? [])
+  const citasDelRango = (citas ?? [])
     .filter((c) => rango === 'todas' || c.fecha === hoy)
     // Hoy: por hora. Todas: las más recientes primero (ya vienen así).
     .sort((a, b) => (rango === 'hoy' ? (a.hora > b.hora ? 1 : -1) : 0));

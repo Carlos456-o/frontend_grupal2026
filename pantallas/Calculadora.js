@@ -1,12 +1,13 @@
 // PANTALLA: Calcula tu lavado
 // Primer paso para agendar una cita: el cliente elige un servicio del
-// catálogo de Firebase. El botón de abajo ("Total a pagar") lleva a la
+// catálogo de Firebase. El botón "Siguiente" (al lado del total) lleva a la
 // pantalla "Agendar cita" (AgendarCita.js) con el servicio elegido.
 
 import { useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { obtenerCatalogo } from '../firebase/servicios';
+import { obtenerPromociones, mejorDescuento } from '../firebase/promociones';
 import { useDatos } from '../firebase/utilidades';
 import Tarjeta from '../componentes/Tarjeta';
 import Cargando from '../componentes/Cargando';
@@ -18,8 +19,12 @@ export default function Calculadora({ parametros, navegarA }) {
   // Si volvemos desde "Agendar cita" con "Cambiar", mantenemos el servicio elegido.
   const [paqueteId, setPaqueteId] = useState(parametros?.servicioId ?? null);
 
+  // Promociones: si un servicio tiene descuento vigente, mostramos su precio rebajado.
+  const { datos: promociones } = useDatos(obtenerPromociones);
+
   const paquete = paquetes.find((p) => p.id === paqueteId) ?? paquetes[0];
-  const total = paquete?.precio ?? 0;
+  const descuentoElegido = mejorDescuento(promociones, paquete);
+  const total = descuentoElegido ? descuentoElegido.precioFinal : paquete?.precio ?? 0;
 
   function alContinuar() {
     if (!paquete) return;
@@ -43,6 +48,7 @@ export default function Calculadora({ parametros, navegarA }) {
         {cargando || error ? <Cargando error={error} alReintentar={recargar} /> : null}
         {paquetes.map((p) => {
           const seleccionado = p.id === paquete?.id;
+          const descuento = mejorDescuento(promociones, p);
           return (
             <View key={p.catalogoId}>
               <Pressable onPress={() => setPaqueteId(p.id)}>
@@ -57,7 +63,14 @@ export default function Calculadora({ parametros, navegarA }) {
                       {p.duracionMinutos != null ? ` · ${p.duracionMinutos} min` : ''}
                     </Text>
                   </View>
-                  <Text style={estilos.precioPaquete}>C${p.precio}</Text>
+                  {descuento ? (
+                    <View style={estilos.columnaPrecio}>
+                      <Text style={estilos.precioTachado}>C${p.precio}</Text>
+                      <Text style={[estilos.precioPaquete, estilos.precioRebajado]}>C${descuento.precioFinal}</Text>
+                    </View>
+                  ) : (
+                    <Text style={estilos.precioPaquete}>C${p.precio}</Text>
+                  )}
                   <View style={[estilos.radio, seleccionado && estilos.radioSeleccionado]}>
                     {seleccionado ? <Ionicons name="checkmark" size={14} color="#ffffff" /> : null}
                   </View>
@@ -68,10 +81,26 @@ export default function Calculadora({ parametros, navegarA }) {
         })}
       </ScrollView>
 
-      <Pressable onPress={alContinuar} style={estilos.barraTotal}>
-        <Text style={estilos.etiquetaTotal}>Total a pagar</Text>
-        <Text style={estilos.valorTotal}>C${total}</Text>
-      </Pressable>
+      {/* Total a la izquierda y, al lado, el botón para seguir a "Agendar cita". */}
+      <View style={estilos.barraTotal}>
+        <View style={{ flex: 1 }}>
+          <Text style={estilos.etiquetaTotal}>Total a pagar</Text>
+          <Text style={estilos.valorTotal}>C${total}</Text>
+          {descuentoElegido ? (
+            <Text style={estilos.textoAhorro} numberOfLines={1}>
+              Ahorras C${descuentoElegido.monto} · {descuentoElegido.promocion.titulo}
+            </Text>
+          ) : null}
+        </View>
+        <Pressable
+          onPress={alContinuar}
+          disabled={!paquete}
+          style={[estilos.botonAgendar, !paquete && { opacity: 0.4 }]}
+        >
+          <Text style={estilos.textoBotonAgendar}>Siguiente</Text>
+          <Ionicons name="arrow-forward" size={18} color="#ffffff" />
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -134,4 +163,18 @@ const estilos = StyleSheet.create({
   },
   etiquetaTotal: { fontSize: 14, color: colores.textoSuave, fontWeight: '600' },
   valorTotal: { fontSize: 20, fontWeight: '800', color: '#7c3aed' },
+  columnaPrecio: { alignItems: 'flex-end' },
+  precioTachado: { fontSize: 12, color: colores.textoSuave, textDecorationLine: 'line-through', marginRight: 12 },
+  precioRebajado: { color: colores.exito },
+  textoAhorro: { fontSize: 12, fontWeight: '600', color: colores.exito, marginTop: 2, marginRight: 10 },
+  botonAgendar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 22,
+    paddingVertical: 13,
+    borderRadius: 12,
+    backgroundColor: '#7c3aed',
+  },
+  textoBotonAgendar: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
 });

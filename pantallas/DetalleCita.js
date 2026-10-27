@@ -60,7 +60,14 @@ export default function DetalleCita({ parametros, navegarA }) {
           <Fila etiqueta="Vehículo" valor={`${cita.vehiculo.modelo} · ${cita.vehiculo.placa}`} />
           <Fila etiqueta="Fecha" valor={cita.fecha} />
           <Fila etiqueta="Hora" valor={cita.hora} />
-          <Fila etiqueta="Precio" valor={`C$${cita.servicio.precio}`} />
+          <Fila
+            etiqueta="Precio"
+            valor={
+              cita.descuento
+                ? `C$${cita.servicio.precio} (antes C$${cita.descuento.precioOriginal} · ${cita.descuento.titulo})`
+                : `C$${cita.servicio.precio}`
+            }
+          />
           <Fila etiqueta="Encargado" valor={empleado?.nombre || 'Por asignar'} />
           {cita.solicitudEspecial ? <Fila etiqueta="Solicitud especial" valor={cita.solicitudEspecial} /> : null}
         </Tarjeta>
@@ -99,6 +106,12 @@ export default function DetalleCita({ parametros, navegarA }) {
             <Boton texto="Cancelar cita" tipo="peligro" alPresionar={alCancelar} />
           </>
         ) : null}
+        <Boton
+          texto="Reportar un problema"
+          tipo="borde"
+          alPresionar={() => navegarA('clienteReportar', { citaId: cita.id })}
+          estilo={{ marginTop: 10 }}
+        />
         <Boton texto="Volver" tipo="borde" alPresionar={() => navegarA('clienteCitas')} estilo={{ marginTop: 10 }} />
       </View>
     </ScrollView>

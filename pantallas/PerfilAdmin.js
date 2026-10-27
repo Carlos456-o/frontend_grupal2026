@@ -4,9 +4,10 @@ import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import Encabezado from '../componentes/Encabezado';
 import Tarjeta from '../componentes/Tarjeta';
 import Boton from '../componentes/Boton';
+import CambiarContrasena from '../componentes/CambiarContrasena';
 import { colores } from '../estilos/colores';
 
-export default function PerfilAdmin({ usuario, cerrarSesion }) {
+export default function PerfilAdmin({ usuario, parametros, cerrarSesion }) {
   return (
     <ScrollView style={estilos.contenedor}>
       <Encabezado titulo="Mi perfil" />
@@ -19,6 +20,10 @@ export default function PerfilAdmin({ usuario, cerrarSesion }) {
           <Text style={estilos.etiqueta}>Teléfono</Text>
           <Text style={estilos.valor}>{usuario.telefono}</Text>
         </Tarjeta>
+      </View>
+      <View style={estilos.seccion}>
+        {/* Abierto de una vez si entró con una contraseña temporal. */}
+        <CambiarContrasena usuario={usuario} abiertoAlInicio={Boolean(parametros?.cambiarContrasena)} />
       </View>
       <View style={estilos.seccion}>
         <Boton texto="Cerrar sesión" tipo="peligro" alPresionar={cerrarSesion} />
