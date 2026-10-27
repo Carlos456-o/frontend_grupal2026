@@ -48,6 +48,16 @@ function aCita(documento) {
     vehiculo: datos.vehiculo ?? { placa: '', modelo: '' },
     solicitudEspecial: datos.solicitud_especial ?? '',
     pasos: datos.pasos ?? [],
+    // Promoción aplicada al agendar (null si no hubo). servicio.precio ya
+    // es el precio con descuento; aquí queda cuánto costaba sin él.
+    descuento: datos.descuento
+      ? {
+          promocionId: datos.descuento.promocion_id ?? '',
+          titulo: datos.descuento.titulo ?? '',
+          precioOriginal: datos.descuento.precio_original ?? 0,
+          monto: datos.descuento.monto ?? 0,
+        }
+      : null,
     // Las citas viejas no tienen este campo: las tomamos como ya vistas
     // para que no le salten avisos antiguos al cliente.
     avisoListoVisto: datos.aviso_listo_visto ?? true,
@@ -103,7 +113,10 @@ export async function horaOcupada(fecha, hora, excluirId = null) {
 // Lanza este error cuando la hora ya fue tomada por otra cita.
 export const ERROR_HORA_OCUPADA = 'hora-ocupada';
 
-export async function crearCita({ clienteId, empleadoId, fecha, hora, servicio, vehiculo, solicitudEspecial }) {
+// "descuento" (opcional) viene de mejorDescuento() en firebase/promociones.js:
+// { promocion, monto, precioFinal }. Si hay, guardamos el precio ya rebajado
+// y una copia de la promoción, igual que hacemos con el servicio.
+export async function crearCita({ clienteId, empleadoId, fecha, hora, servicio, vehiculo, solicitudEspecial, descuento }) {
   if (await horaOcupada(fecha, hora)) throw new Error(ERROR_HORA_OCUPADA);
   const referencia = await addDoc(coleccion, {
     cliente_id: clienteId,
@@ -111,7 +124,15 @@ export async function crearCita({ clienteId, empleadoId, fecha, hora, servicio, 
     fecha: textoATimestamp(fecha),
     hora,
     estado: 'pendiente',
-    servicio: { id: servicio.id, nombre: servicio.nombre, precio: servicio.precio },
+    servicio: { id: servicio.id, nombre: servicio.nombre, precio: descuento ? descuento.precioFinal : servicio.precio },
+    descuento: descuento
+      ? {
+          promocion_id: descuento.promocion.id,
+          titulo: descuento.promocion.titulo,
+          precio_original: servicio.precio,
+          monto: descuento.monto,
+        }
+      : null,
     vehiculo,
     solicitud_especial: solicitudEspecial ?? '',
     pasos: [],
@@ -183,6 +204,29 @@ export async function obtenerCalificaciones() {
 export function escucharCitasDeCliente(clienteId, alCambiar) {
   return onSnapshot(
     query(coleccion, where('cliente_id', '==', clienteId)),
+    (resultado) => alCambiar(resultado.docs.map(aCita)),
+    () => {} // si se cae la conexión no hacemos nada; Firebase reintenta solo
+  );
+}
+
+// Escucha en tiempo real TODAS las citas (para el panel del admin): cada
+// vez que un cliente agenda, reprograma o cancela, "alCambiar" recibe la
+// lista nueva, las más recientes primero. "alFallar" se llama si no hay
+// conexión. Devuelve una función para dejar de escuchar.
+export function escucharCitas(alCambiar, alFallar = () => {}) {
+  return onSnapshot(
+    coleccion,
+    (resultado) => alCambiar(ordenarRecientesPrimero(resultado.docs.map(aCita))),
+    alFallar
+  );
+}
+
+// Escucha en tiempo real las citas de un día ("AAAA-MM-DD"). Lo usa
+// "Agendar cita" para que las horas ocupadas se actualicen solas cuando
+// otro cliente reserva. Devuelve una función para dejar de escuchar.
+export function escucharCitasDeFecha(fechaISO, alCambiar) {
+  return onSnapshot(
+    query(coleccion, where('fecha', '==', textoATimestamp(fechaISO))),
     (resultado) => alCambiar(resultado.docs.map(aCita)),
     () => {} // si se cae la conexión no hacemos nada; Firebase reintenta solo
   );

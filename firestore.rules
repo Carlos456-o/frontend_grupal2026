@@ -1,0 +1,125 @@
+// Reglas de seguridad de Firestore para la app "Divino Niño".
+// Se copian en: Consola de Firebase > Firestore Database > Reglas > Publicar.
+//
+// Idea general:
+//   - Cada persona entra con Firebase Authentication (request.auth.uid).
+//   - Su tipo de cuenta está en usuarios/{uid}.rol:
+//       "cliente", "empleado" o "administrador".
+//   - Las reglas leen ese rol para decidir qué puede leer y cambiar.
+//     Aunque alguien modifique la app, Firebase no le deja pasar de aquí.
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Ayudas ----------
+    function conSesion() {
+      return request.auth != null;
+    }
+    function rutaCuenta() {
+      return /databases/$(database)/documents/usuarios/$(request.auth.uid);
+    }
+    function tieneCuenta() {
+      return conSesion() && exists(rutaCuenta());
+    }
+    function cuenta() {
+      return get(rutaCuenta()).data;
+    }
+    function esAdmin() {
+      return tieneCuenta() && cuenta().rol == 'administrador';
+    }
+    // Empleados y administrador (el personal del autolavado).
+    function esPersonal() {
+      return tieneCuenta() && cuenta().rol in ['empleado', 'administrador'];
+    }
+    // true si el perfil (cliente o empleado) es el de quien hace la petición.
+    function esMiPerfil(perfilId) {
+      return tieneCuenta() && cuenta().perfil_id == perfilId;
+    }
+
+    // ---------- Catálogo: lo ve cualquiera, incluso invitados ----------
+    match /servicios/{id} {
+      allow read: if true;
+      allow write: if esAdmin();
+    }
+    match /catalogo/{id} {
+      allow read: if true;
+      allow write: if esAdmin();
+    }
+    match /promociones/{id} {
+      allow read: if true;
+      allow write: if esAdmin();
+    }
+
+    // ---------- Cuentas ----------
+    // usuarios/{uid}: rol, teléfono, correo y perfil de cada cuenta.
+    match /usuarios/{uid} {
+      allow read: if (conSesion() && request.auth.uid == uid) || esAdmin();
+      // Al registrarse, un cliente solo puede crear SU cuenta y solo como "cliente".
+      // Las cuentas de empleados las crea el admin.
+      allow create: if (conSesion() && request.auth.uid == uid && request.resource.data.rol == 'cliente')
+                    || esAdmin();
+      // Cada quien puede actualizar su correo, pero nunca su rol ni su perfil.
+      allow update: if esAdmin()
+                    || (conSesion() && request.auth.uid == uid
+                        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['rol', 'perfil_id']));
+      allow delete: if esAdmin();
+    }
+
+    // telefonos/{telefono}: el correo de cada teléfono, para poder entrar con
+    // el teléfono. Se puede consultar un teléfono puntual, pero no listarlos todos.
+    match /telefonos/{telefono} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if (conSesion() && request.resource.data.uid == request.auth.uid) || esAdmin();
+      allow update: if (conSesion() && resource.data.uid == request.auth.uid
+                        && request.resource.data.uid == request.auth.uid)
+                    || esAdmin();
+      allow delete: if esAdmin();
+    }
+
+    // ---------- Personas ----------
+    match /clientes/{clienteId} {
+      allow read: if esPersonal() || esMiPerfil(clienteId);
+      // Al registrarse: solo si en la misma operación crea su cuenta apuntando a este cliente.
+      allow create: if esAdmin()
+                    || (conSesion()
+                        && getAfter(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.perfil_id == clienteId);
+      allow update: if esPersonal() || esMiPerfil(clienteId);
+      allow delete: if esAdmin();
+    }
+
+    match /empleados/{empleadoId} {
+      // Los clientes ven el nombre del empleado que atiende su cita.
+      allow read: if tieneCuenta();
+      allow write: if esAdmin();
+    }
+
+    // ---------- Citas ----------
+    match /citas/{citaId} {
+      // Cualquiera con cuenta puede leer citas: el cliente necesita ver qué
+      // horas ya están ocupadas al agendar.
+      allow read: if tieneCuenta();
+      // Un cliente solo agenda a su nombre y siempre como "pendiente".
+      allow create: if esPersonal()
+                    || (esMiPerfil(request.resource.data.cliente_id) && request.resource.data.estado == 'pendiente');
+      // El cliente puede reprogramar, cancelar o calificar SU cita; el personal, cualquiera.
+      allow update: if esPersonal()
+                    || (esMiPerfil(resource.data.cliente_id) && request.resource.data.cliente_id == resource.data.cliente_id);
+      allow delete: if esAdmin();
+    }
+
+    // ---------- Reportes de problemas ----------
+    match /reportes/{reporteId} {
+      allow read: if esAdmin() || esMiPerfil(resource.data.cliente_id);
+      allow create: if esMiPerfil(request.resource.data.cliente_id) && request.resource.data.estado == 'abierto';
+      allow update, delete: if esAdmin();
+    }
+
+    // Cualquier otra colección (por ejemplo las viejas "solicitudes_contrasena"): cerrada.
+    match /{documento=**} {
+      allow read, write: if false;
+    }
+  }
+}
