@@ -2,7 +2,7 @@
 // Campos: nombre, telefono, email, vehiculos ([{ placa, modelo }]), fecha_registro
 // Dentro de la app usamos "correo" y "fechaRegistro" (texto "AAAA-MM-DD").
 
-import { collection, getDocs, getDoc, updateDoc, doc, arrayUnion } from 'firebase/firestore';
+import { collection, getDocs, getDoc, updateDoc, doc, arrayUnion, onSnapshot } from 'firebase/firestore';
 import { db } from './config';
 import { timestampATexto } from './utilidades';
 
@@ -21,6 +21,17 @@ export function aCliente(documento) {
 export async function obtenerClientes() {
   const resultado = await getDocs(collection(db, 'clientes'));
   return resultado.docs.map(aCliente).sort((a, b) => a.nombre.localeCompare(b.nombre));
+}
+
+// Escucha en tiempo real la lista de clientes, para que el admin vea el
+// nombre de un cliente recién registrado sin recargar la pantalla.
+// Devuelve una función para dejar de escuchar.
+export function escucharClientes(alCambiar) {
+  return onSnapshot(
+    collection(db, 'clientes'),
+    (resultado) => alCambiar(resultado.docs.map(aCliente).sort((a, b) => a.nombre.localeCompare(b.nombre))),
+    () => {} // si se cae la conexión no hacemos nada; Firebase reintenta solo
+  );
 }
 
 export async function obtenerCliente(id) {
