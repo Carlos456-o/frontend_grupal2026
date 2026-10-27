@@ -1,5 +1,7 @@
 // Funciones para la colección "empleados" de Firebase.
-// Campos: nombre, telefono, rol ("lavador", "recepcionista", "cajero" o "supervisor")
+// Campos: nombre, telefono, correo, rol ("lavador", "recepcionista", "cajero" o "supervisor")
+// Ojo: este "rol" es el puesto de trabajo. El tipo de cuenta ("empleado")
+// está en "usuarios/{uid}".
 
 import { collection, getDocs, getDoc, addDoc, doc } from 'firebase/firestore';
 import { db } from './config';
@@ -10,6 +12,7 @@ export function aEmpleado(documento) {
     id: documento.id,
     nombre: datos.nombre ?? '',
     telefono: datos.telefono ?? '',
+    correo: datos.correo ?? '',
     rol: datos.rol ?? '',
   };
 }
