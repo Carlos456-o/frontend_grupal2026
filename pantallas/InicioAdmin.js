@@ -3,24 +3,25 @@
 // rápidos para crear cosas, y una lista para gestionar cada parte del
 // negocio (servicios, catálogo, empleados, clientes).
 
+import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { obtenerCitasDeFecha } from '../firebase/citas';
+import { escucharCitasDeFecha } from '../firebase/citas';
 import { obtenerServicios, actividadesDe } from '../firebase/servicios';
 import { obtenerClientes } from '../firebase/clientes';
 import { obtenerEmpleados } from '../firebase/empleados';
 import { useDatos, hoyISO } from '../firebase/utilidades';
 import { colores } from '../estilos/colores';
 
-// Todo lo que muestra el panel, pedido a Firebase de una sola vez.
+// Servicios, clientes y empleados se piden a Firebase de una sola vez.
+// Las citas de hoy se escuchan aparte, en tiempo real (ver abajo).
 async function cargarResumen() {
-  const [citasHoy, servicios, clientes, empleados] = await Promise.all([
-    obtenerCitasDeFecha(hoyISO()),
+  const [servicios, clientes, empleados] = await Promise.all([
     obtenerServicios(),
     obtenerClientes(),
     obtenerEmpleados(),
   ]);
-  return { citasHoy, servicios, clientes, empleados };
+  return { servicios, clientes, empleados };
 }
 
 const DIAS_SEMANA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
@@ -36,7 +37,10 @@ function fechaDeHoyEnTexto() {
 
 export default function InicioAdmin({ usuario, navegarA }) {
   const { datos } = useDatos(cargarResumen);
-  const citasHoy = datos?.citasHoy ?? [];
+
+  // Las citas de hoy se actualizan solas cuando un cliente agenda o cancela.
+  const [citasHoy, setCitasHoy] = useState([]);
+  useEffect(() => escucharCitasDeFecha(hoyISO(), setCitasHoy), []);
   const ingresosHoy = citasHoy
     .filter((c) => c.estado !== 'cancelada')
     .reduce((suma, c) => suma + (c.servicio.precio ?? 0), 0);

@@ -1,12 +1,14 @@
 // PANTALLA: Nuevo empleado (admin)
-// Formulario para registrar un empleado en la colección "empleados" de
-// Firebase. Si se escribe una contraseña, también se le crea una cuenta en
-// "usuarios" para que pueda iniciar sesión como empleado con su teléfono.
+// Registra un empleado y le crea su cuenta para entrar a la app:
+//   - documento en "empleados" (nombre, teléfono, puesto, correo)
+//   - cuenta en Firebase Authentication con su correo y una contraseña inicial
+//   - "usuarios/{uid}" con rol "empleado"
+// El empleado entra con su correo o teléfono y la contraseña que le dé el
+// admin, y puede cambiarla en su perfil (o recuperarla por correo).
 
 import { useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet, Alert } from 'react-native';
-import { crearEmpleado } from '../firebase/empleados';
-import { crearUsuario, telefonoRegistrado } from '../firebase/usuarios';
+import { crearCuentaEmpleado, esCorreo, mensajeDeError, LARGO_MINIMO_CONTRASENA } from '../firebase/autenticacion';
 import Encabezado from '../componentes/Encabezado';
 import CampoTexto from '../componentes/CampoTexto';
 import Boton from '../componentes/Boton';
@@ -16,39 +18,44 @@ import { colores } from '../estilos/colores';
 export default function NuevoEmpleado({ navegarA }) {
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
+  const [correo, setCorreo] = useState('');
   const [rol, setRol] = useState('lavador');
   const [contrasena, setContrasena] = useState('');
   const [guardando, setGuardando] = useState(false);
 
   async function alGuardar() {
     if (guardando) return;
-    if (!nombre.trim() || !telefono.trim()) {
-      Alert.alert('Datos incompletos', 'Completa nombre y teléfono.');
+    if (!nombre.trim() || !telefono.trim() || !correo.trim()) {
+      Alert.alert('Datos incompletos', 'Completa nombre, teléfono y correo.');
       return;
     }
-    if (contrasena && contrasena.length < 4) {
-      Alert.alert('Contraseña muy corta', 'Usa al menos 4 caracteres, o déjala vacía.');
+    if (!esCorreo(correo.trim())) {
+      Alert.alert('Correo inválido', 'Revisa el correo del empleado.');
+      return;
+    }
+    if (contrasena.length < LARGO_MINIMO_CONTRASENA) {
+      Alert.alert('Contraseña muy corta', `Usa al menos ${LARGO_MINIMO_CONTRASENA} caracteres.`);
       return;
     }
 
     setGuardando(true);
     try {
-      if (contrasena && (await telefonoRegistrado(telefono.trim()))) {
-        setGuardando(false);
-        Alert.alert('Teléfono en uso', 'Ya existe una cuenta con ese teléfono.');
-        return;
-      }
-      const empleadoId = await crearEmpleado({ nombre: nombre.trim(), telefono: telefono.trim(), rol });
-      if (contrasena) {
-        await crearUsuario({ telefono: telefono.trim(), contrasena, rol: 'empleado', perfilId: empleadoId });
-      }
+      await crearCuentaEmpleado({
+        nombre: nombre.trim(),
+        telefono: telefono.trim(),
+        correo: correo.trim(),
+        contrasena,
+        puesto: rol,
+      });
     } catch (e) {
       setGuardando(false);
-      Alert.alert('Error', 'No se pudo guardar el empleado. Intenta de nuevo.');
+      Alert.alert('No se pudo guardar el empleado', mensajeDeError(e.message));
       return;
     }
 
-    Alert.alert('Empleado agregado', '', [{ text: 'OK', onPress: () => navegarA('adminEmpleados') }]);
+    Alert.alert('Empleado agregado', 'Ya puede entrar con su correo o teléfono y la contraseña que le diste.', [
+      { text: 'OK', onPress: () => navegarA('adminEmpleados') },
+    ]);
   }
 
   return (
@@ -57,6 +64,15 @@ export default function NuevoEmpleado({ navegarA }) {
       <View style={{ paddingHorizontal: 16 }}>
         <CampoTexto etiqueta="Nombre completo" valor={nombre} alCambiar={setNombre} />
         <CampoTexto etiqueta="Teléfono" keyboardType="phone-pad" valor={telefono} alCambiar={setTelefono} />
+        <CampoTexto
+          etiqueta="Correo"
+          placeholder="Para entrar y recuperar su contraseña"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+          valor={correo}
+          alCambiar={setCorreo}
+        />
 
         <Text style={estilos.etiqueta}>Rol</Text>
         <View style={estilos.filaRoles}>
@@ -75,7 +91,7 @@ export default function NuevoEmpleado({ navegarA }) {
         </View>
 
         <CampoTexto
-          etiqueta="Contraseña para la app (opcional)"
+          etiqueta={`Contraseña inicial (mínimo ${LARGO_MINIMO_CONTRASENA} caracteres)`}
           secureTextEntry
           valor={contrasena}
           alCambiar={setContrasena}

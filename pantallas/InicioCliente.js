@@ -1,11 +1,15 @@
 // PANTALLA: Inicio del cliente
 // Es lo primero que ve un cliente después de iniciar sesión.
 // Muestra un saludo, un botón para agendar, su próxima cita
-// (si tiene una pendiente o confirmada) y algunos servicios destacados.
+// (si tiene una pendiente o confirmada), las promociones vigentes y
+// algunos servicios destacados.
 
+import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { obtenerCitasDeCliente } from '../firebase/citas';
+import { escucharPromociones, promocionesVigentes, textoDescuento, fechaCorta } from '../firebase/promociones';
 import { obtenerCatalogo } from '../firebase/servicios';
 import { useDatos } from '../firebase/utilidades';
 import Tarjeta from '../componentes/Tarjeta';
@@ -33,6 +37,11 @@ export default function InicioCliente({ usuario, navegarA }) {
   // Solo mostramos 2 servicios del catálogo de Firebase como "destacados" en el inicio.
   const { datos: catalogo } = useDatos(obtenerCatalogo);
   const serviciosDestacados = (catalogo ?? []).slice(0, 2);
+
+  // Promociones vigentes, en tiempo real (si el admin crea una, aparece sola).
+  const [promociones, setPromociones] = useState([]);
+  useEffect(() => escucharPromociones(setPromociones), []);
+  const vigentes = promocionesVigentes(promociones);
 
   // Iniciales del nombre, para el círculo de avatar (ej. "Andrea Salazar" -> "AS").
   const iniciales = usuario.perfil.nombre
@@ -98,6 +107,39 @@ export default function InicioCliente({ usuario, navegarA }) {
         ) : null}
       </View>
 
+      {vigentes.length > 0 ? (
+        <View style={estilos.seccion}>
+          <Text style={[estilos.tituloSeccion, { marginBottom: 10 }]}>Promociones</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+            {vigentes.map((p) => (
+              // Tocarla lleva a la calculadora con ese servicio ya elegido.
+              <Pressable key={p.id} onPress={() => navegarA('clienteCalculadora', { servicioId: p.servicioId })}>
+                <LinearGradient
+                  colors={['#f97316', '#db2777']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[estilos.tarjetaPromo, vigentes.length === 1 && estilos.tarjetaPromoSola]}
+                >
+                  <View style={estilos.filaPromo}>
+                    <Ionicons name="pricetag" size={16} color="#ffffff" />
+                    <Text style={estilos.descuentoPromo}>{textoDescuento(p)}</Text>
+                  </View>
+                  <Text style={estilos.tituloPromo}>{p.titulo}</Text>
+                  {p.descripcion ? (
+                    <Text style={estilos.textoPromo} numberOfLines={2}>
+                      {p.descripcion}
+                    </Text>
+                  ) : null}
+                  <Text style={estilos.textoPromo}>
+                    {p.servicioId ? `En ${p.servicioNombre}` : 'En todos los servicios'} · hasta el {fechaCorta(p.fechaFin)}
+                  </Text>
+                </LinearGradient>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
+
       <View style={estilos.seccion}>
         <View style={estilos.filaTitulo}>
           <Text style={estilos.tituloSeccion}>Nuestros servicios</Text>
@@ -156,4 +198,11 @@ const estilos = StyleSheet.create({
   filaTitulo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   tituloSeccion: { fontSize: 16, fontWeight: '700', color: colores.texto },
   verTodos: { fontSize: 13, color: colores.principal, fontWeight: '600' },
+
+  tarjetaPromo: { width: 260, borderRadius: 16, padding: 16 },
+  tarjetaPromoSola: { width: 340 },
+  filaPromo: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  descuentoPromo: { fontSize: 13, fontWeight: '800', color: '#ffffff' },
+  tituloPromo: { fontSize: 17, fontWeight: '800', color: '#ffffff', marginTop: 6 },
+  textoPromo: { fontSize: 12, color: 'rgba(255,255,255,0.9)', marginTop: 4 },
 });

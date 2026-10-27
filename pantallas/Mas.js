@@ -1,26 +1,43 @@
 // PANTALLA: Más (admin)
 // Menú con las opciones que ya no caben en la barra de abajo:
-// empleados, clientes, el perfil del admin y cerrar sesión.
+// empleados, clientes, calificaciones, promociones, reportes de clientes,
+// el perfil del admin y cerrar sesión.
 
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { obtenerEmpleados } from '../firebase/empleados';
 import { obtenerClientes } from '../firebase/clientes';
 import { obtenerCalificaciones } from '../firebase/citas';
+import { obtenerReportes } from '../firebase/reportes';
+import { obtenerPromociones, promocionesVigentes } from '../firebase/promociones';
 import { useDatos } from '../firebase/utilidades';
 import Encabezado from '../componentes/Encabezado';
 import { colores } from '../estilos/colores';
 
 async function contarPersonas() {
-  const [empleados, clientes, calificaciones] = await Promise.all([
+  const [empleados, clientes, calificaciones, reportes, promociones] = await Promise.all([
     obtenerEmpleados(),
     obtenerClientes(),
     obtenerCalificaciones(),
+    obtenerReportes(),
+    obtenerPromociones(),
   ]);
   const promedio = calificaciones.length
     ? calificaciones.reduce((suma, c) => suma + c.calificacion.estrellas, 0) / calificaciones.length
     : 0;
-  return { empleados: empleados.length, clientes: clientes.length, calificaciones: calificaciones.length, promedio };
+  return {
+    empleados: empleados.length,
+    clientes: clientes.length,
+    calificaciones: calificaciones.length,
+    promedio,
+    reportesAbiertos: reportes.filter((r) => r.estado === 'abierto').length,
+    promocionesVigentes: promocionesVigentes(promociones).length,
+  };
+}
+
+// "3 reportes abiertos", "1 reporte abierto"...
+function plural(cantidad, singular, pluralTexto) {
+  return `${cantidad} ${cantidad === 1 ? singular : pluralTexto}`;
 }
 
 export default function Mas({ usuario, navegarA, cerrarSesion }) {
@@ -56,6 +73,23 @@ export default function Mas({ usuario, navegarA, cerrarSesion }) {
       alPresionar: () => navegarA('adminCalificaciones'),
     },
     {
+      titulo: 'Promociones',
+      subtitulo: datos ? plural(datos.promocionesVigentes, 'promoción vigente', 'promociones vigentes') : '…',
+      icono: 'pricetag-outline',
+      colorFondo: '#ffedd5',
+      color: '#c2410c',
+      alPresionar: () => navegarA('adminPromociones'),
+    },
+    {
+      titulo: 'Reportes de clientes',
+      subtitulo: datos ? plural(datos.reportesAbiertos, 'reporte abierto', 'reportes abiertos') : '…',
+      icono: 'alert-circle-outline',
+      colorFondo: '#fee2e2',
+      color: colores.peligro,
+      pendientes: datos?.reportesAbiertos ?? 0,
+      alPresionar: () => navegarA('adminReportes'),
+    },
+    {
       titulo: 'Mi perfil',
       subtitulo: usuario.perfil.nombre,
       icono: 'settings-outline',
@@ -78,6 +112,12 @@ export default function Mas({ usuario, navegarA, cerrarSesion }) {
               <Text style={estilos.titulo}>{o.titulo}</Text>
               <Text style={estilos.subtitulo}>{o.subtitulo}</Text>
             </View>
+            {/* Globito rojo con lo que falta atender. */}
+            {o.pendientes ? (
+              <View style={estilos.globo}>
+                <Text style={estilos.textoGlobo}>{o.pendientes}</Text>
+              </View>
+            ) : null}
             <Ionicons name="chevron-forward" size={20} color={colores.textoSuave} />
           </Pressable>
         ))}
@@ -109,4 +149,15 @@ const estilos = StyleSheet.create({
   icono: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   titulo: { fontSize: 14, fontWeight: '700', color: colores.texto },
   subtitulo: { fontSize: 12, color: colores.textoSuave, marginTop: 2 },
+  globo: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 6,
+    backgroundColor: colores.peligro,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  textoGlobo: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
 });

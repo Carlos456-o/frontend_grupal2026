@@ -10,11 +10,12 @@
 // carga esa cita, rellena el formulario y al confirmar la actualiza en
 // Firebase en vez de crear una nueva.
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { obtenerCliente } from '../firebase/clientes';
-import { obtenerCita, obtenerCitasDeFecha, crearCita, reprogramarCita, ERROR_HORA_OCUPADA } from '../firebase/citas';
+import { obtenerCita, escucharCitasDeFecha, crearCita, reprogramarCita, ERROR_HORA_OCUPADA } from '../firebase/citas';
+import { obtenerPromociones, mejorDescuento } from '../firebase/promociones';
 import { useDatos, hoyISO } from '../firebase/utilidades';
 import Tarjeta from '../componentes/Tarjeta';
 import SinResultados from '../componentes/SinResultados';
@@ -71,11 +72,38 @@ function FormularioCita({ usuario, parametros, navegarA, citaOriginal }) {
   const vehiculos = cliente?.vehiculos ?? usuario.perfil.vehiculos ?? [];
   const vehiculo = vehiculos.find((v) => v.placa === placaElegida) ?? vehiculos[0];
 
-  const { datos: citasDelDia } = useDatos(() => obtenerCitasDeFecha(fechaElegida), [fechaElegida]);
+  // Las citas del día se escuchan en tiempo real: si otro cliente reserva
+  // una hora, aparece tachada sola, sin tener que salir y volver a entrar.
+  const [citasDelDia, setCitasDelDia] = useState([]);
+  useEffect(() => {
+    setCitasDelDia([]);
+    return escucharCitasDeFecha(fechaElegida, setCitasDelDia);
+  }, [fechaElegida]);
+
   // La propia cita que se reprograma no cuenta como ocupada.
-  const horasOcupadas = (citasDelDia ?? [])
+  const horasOcupadas = citasDelDia
     .filter((c) => c.estado !== 'cancelada' && c.id !== citaOriginal?.id)
     .map((c) => c.hora);
+
+  // Si la hora que el cliente eligió la acaba de tomar otra persona, la
+  // quitamos y le avisamos. Mientras guardamos no avisamos, porque la que
+  // aparece ocupada es justo la cita que se está creando.
+  const horaTomada = Boolean(horaElegida) && horasOcupadas.includes(horaElegida);
+  useEffect(() => {
+    if (!horaTomada || guardando) return;
+    Alert.alert('Hora no disponible', `Alguien acaba de reservar las ${horaElegida}. Elige otra hora.`);
+    setHoraElegida(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [horaTomada, guardando]);
+
+  // Promoción vigente para este servicio. Al reprogramar no se recalcula:
+  // la cita conserva el precio con el que se agendó.
+  const { datos: promociones } = useDatos(obtenerPromociones);
+  const descuento = esReprogramar ? null : mejorDescuento(promociones, servicio);
+  const precioAPagar = descuento ? descuento.precioFinal : servicio?.precio;
+
+  const diaElegido = dias.find((d) => d.clave === fechaElegida);
+  const listoParaConfirmar = Boolean(vehiculo && horaElegida) && !guardando;
 
   function alVolver() {
     if (esReprogramar) navegarA('clienteCitas');
@@ -111,11 +139,12 @@ function FormularioCita({ usuario, parametros, navegarA, citaOriginal }) {
       if (esReprogramar) {
         await reprogramarCita(citaOriginal.id, datosCita);
       } else {
-        await crearCita({ ...datosCita, clienteId: usuario.perfil.id, empleadoId: null, servicio });
+        await crearCita({ ...datosCita, clienteId: usuario.perfil.id, empleadoId: null, servicio, descuento });
       }
     } catch (e) {
       setGuardando(false);
       if (e.message === ERROR_HORA_OCUPADA) {
+        setHoraElegida(null); // así no sale un segundo aviso por la misma hora
         Alert.alert('Hora no disponible', 'Alguien acaba de tomar esa hora. Elige otra.');
       } else {
         Alert.alert('Error', 'No se pudo guardar la cita. Intenta de nuevo.');
@@ -148,8 +177,14 @@ function FormularioCita({ usuario, parametros, navegarA, citaOriginal }) {
           <View style={estilos.textosServicio}>
             <Text style={estilos.nombreServicio}>{servicio.nombre}</Text>
             <Text style={estilos.detalleServicio}>
-              {servicio.duracionMinutos != null ? `${servicio.duracionMinutos} min · ` : ''}C${servicio.precio}
+              {servicio.duracionMinutos != null ? `${servicio.duracionMinutos} min · ` : ''}C${precioAPagar}
+              {descuento ? <Text style={estilos.precioTachado}> C${servicio.precio}</Text> : null}
             </Text>
+            {descuento ? (
+              <Text style={estilos.textoPromo}>
+                🏷️ {descuento.promocion.titulo} · ahorras C${descuento.monto}
+              </Text>
+            ) : null}
           </View>
           {/* Al reprogramar el servicio se mantiene: solo cambian fecha, hora y vehículo. */}
           {esReprogramar ? null : (
@@ -224,12 +259,32 @@ function FormularioCita({ usuario, parametros, navegarA, citaOriginal }) {
         />
       </ScrollView>
 
-      <Pressable onPress={alConfirmar} style={estilos.barraTotal}>
-        <Text style={estilos.etiquetaTotal}>
-          {guardando ? 'Guardando...' : esReprogramar ? 'Guardar cambios · Total' : 'Confirmar · Total'}
-        </Text>
-        <Text style={estilos.valorTotal}>C${servicio.precio}</Text>
-      </Pressable>
+      {/* Resumen de lo elegido + botón para confirmar. El botón se activa
+          cuando ya hay vehículo y hora seleccionados. */}
+      <View style={estilos.barraTotal}>
+        <View style={estilos.filaResumen}>
+          <View style={{ flex: 1 }}>
+            <Text style={estilos.etiquetaTotal}>
+              {horaElegida ? `${diaElegido?.dia ?? ''} ${diaElegido?.numero ?? ''} · ${horaElegida}` : 'Elige una hora'}
+            </Text>
+            {vehiculo ? <Text style={estilos.textoPlaca}>{vehiculo.modelo} · {vehiculo.placa}</Text> : null}
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            {descuento ? <Text style={estilos.precioTachado}>C${servicio.precio}</Text> : null}
+            <Text style={estilos.valorTotal}>C${precioAPagar}</Text>
+          </View>
+        </View>
+        <Pressable
+          onPress={alConfirmar}
+          disabled={!listoParaConfirmar}
+          style={[estilos.botonConfirmar, !listoParaConfirmar && estilos.botonConfirmarDeshabilitado]}
+        >
+          <Ionicons name="checkmark-circle" size={20} color="#ffffff" />
+          <Text style={estilos.textoBotonConfirmar}>
+            {guardando ? 'Guardando...' : esReprogramar ? 'Confirmar cambios' : 'Confirmar cita'}
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -269,6 +324,8 @@ const estilos = StyleSheet.create({
   nombreServicio: { fontSize: 14, fontWeight: '700', color: colores.texto },
   detalleServicio: { fontSize: 12, color: colores.textoSuave, marginTop: 2 },
   enlaceCambiar: { fontSize: 12, fontWeight: '700', color: colores.principal },
+  precioTachado: { fontSize: 12, color: colores.textoSuave, textDecorationLine: 'line-through' },
+  textoPromo: { fontSize: 12, fontWeight: '700', color: colores.exito, marginTop: 4 },
 
   filaDias: { flexDirection: 'row', gap: 8 },
   chipDia: {
@@ -322,15 +379,25 @@ const estilos = StyleSheet.create({
   },
 
   barraTotal: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 18,
+    paddingTop: 14,
+    paddingBottom: 18,
     borderTopWidth: 1,
     borderTopColor: colores.borde,
     backgroundColor: colores.tarjeta,
   },
-  etiquetaTotal: { fontSize: 14, color: colores.textoSuave, fontWeight: '600' },
+  filaResumen: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  etiquetaTotal: { fontSize: 14, color: colores.texto, fontWeight: '700' },
   valorTotal: { fontSize: 20, fontWeight: '800', color: '#132048' },
+  botonConfirmar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#132048',
+  },
+  botonConfirmarDeshabilitado: { opacity: 0.4 },
+  textoBotonConfirmar: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
 });

@@ -10,11 +10,12 @@ import Encabezado from '../componentes/Encabezado';
 import Tarjeta from '../componentes/Tarjeta';
 import TarjetaVehiculo from '../componentes/TarjetaVehiculo';
 import Boton from '../componentes/Boton';
+import CambiarContrasena from '../componentes/CambiarContrasena';
 import SinResultados from '../componentes/SinResultados';
 import Cargando from '../componentes/Cargando';
 import { colores } from '../estilos/colores';
 
-export default function PerfilCliente({ usuario, navegarA, cerrarSesion }) {
+export default function PerfilCliente({ usuario, parametros, navegarA, cerrarSesion }) {
   // Traemos el cliente de Firebase para ver también los vehículos agregados después de iniciar sesión.
   const { datos: cliente, cargando, error, recargar } = useDatos(
     () => obtenerCliente(usuario.perfil.id),
@@ -48,6 +49,18 @@ export default function PerfilCliente({ usuario, navegarA, cerrarSesion }) {
           perfil.vehiculos.map((v) => <TarjetaVehiculo key={v.placa} vehiculo={v} />)
         )}
         <Boton texto="Administrar vehículos" tipo="borde" alPresionar={() => navegarA('clienteVehiculos')} />
+      </View>
+
+      <View style={estilos.seccion}>
+        <Text style={estilos.tituloSeccion}>Cuenta y ayuda</Text>
+        {/* Abierto de una vez si entró con una contraseña temporal. */}
+        <CambiarContrasena usuario={usuario} abiertoAlInicio={Boolean(parametros?.cambiarContrasena)} />
+        <Boton
+          texto="Reportar un problema"
+          tipo="borde"
+          alPresionar={() => navegarA('clienteReportar')}
+          estilo={{ marginTop: 10 }}
+        />
       </View>
 
       <View style={estilos.seccion}>
