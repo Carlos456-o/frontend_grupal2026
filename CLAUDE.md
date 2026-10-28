@@ -36,10 +36,12 @@ Colecciones: `clientes`, `catalogo`, `servicio`, `empleado`, `citas`.
 - `citas`: cliente_id, vehiculo (copia embebida), servicio (copia embebida con precio al agendar), empleado_id (opcional), fecha, hora, estado (Pendiente / Confirmada / En proceso / Completada / Cancelada), solicitud_especial.
 - Criterio de modelado: se referencia al cliente y al empleado, y se **embebe** una copia del vehículo y del servicio dentro de la cita.
 
-## Usuarios de prueba (datos semilla del proyecto, no son credenciales reales)
-- Cliente: teléfono `0981112233`, contraseña `1234`
-- Empleado: `11111111` / `1234`
-- Administrador: `85129988` / `123456789`
+## Cuentas de prueba (Firebase Authentication)
+Desde oct 2026 el login usa Firebase Authentication: se entra con correo o teléfono + contraseña, y el rol sale de `usuarios/{uid}` (no se elige al entrar). Las contraseñas no se guardan aquí porque el repositorio es público; las tiene el equipo.
+- Administrador: teléfono `3103334455`
+- Empleado: teléfono `3105556677`
+- Clientes: `3001112233`, `88982838` y el resto de los registrados en la colección `clientes`
+- Los usuarios semilla viejos (`0981112233`, `11111111`, `85129988`) ya no existen.
 
 ## Historias de usuario (17) y estado
 HF01 iniciar sesión con teléfono · HF02 recuperar contraseña · HF03 agendar cita · HF04 registrar datos del cliente y vehículo · HF05 actualizar datos · HF06 ver catálogo y precios · HF07 servicio favorito · HF08 reagendar cita · HF09 valorar servicio · HF10 ver promociones · HF11 reportar problema · HF12 notificar estado del servicio · HF13 buscar y filtrar · HF14 historial de servicios · HF15 CRUD de administrador · HF16 cálculo del servicio según vehículo y extras · HF17 CRUD de empleados.

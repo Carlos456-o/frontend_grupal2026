@@ -1,12 +1,12 @@
 // PANTALLA: Más (admin)
 // Menú con las opciones que ya no caben en la barra de abajo:
-// empleados, clientes, calificaciones, promociones, reportes de clientes,
-// el perfil del admin y cerrar sesión.
+// calificaciones, promociones, reportes de clientes, estadísticas,
+// reportes en Excel y PDF, el perfil del admin y cerrar sesión.
+// (Empleados y clientes se abren desde el Inicio del admin.)
 
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { obtenerEmpleados } from '../firebase/empleados';
-import { obtenerClientes } from '../firebase/clientes';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { descargarExcel, descargarPdf } from '../api/backend';
 import { obtenerCalificaciones } from '../firebase/citas';
 import { obtenerReportes } from '../firebase/reportes';
 import { obtenerPromociones, promocionesVigentes } from '../firebase/promociones';
@@ -15,9 +15,7 @@ import Encabezado from '../componentes/Encabezado';
 import { colores } from '../estilos/colores';
 
 async function contarPersonas() {
-  const [empleados, clientes, calificaciones, reportes, promociones] = await Promise.all([
-    obtenerEmpleados(),
-    obtenerClientes(),
+  const [calificaciones, reportes, promociones] = await Promise.all([
     obtenerCalificaciones(),
     obtenerReportes(),
     obtenerPromociones(),
@@ -26,8 +24,6 @@ async function contarPersonas() {
     ? calificaciones.reduce((suma, c) => suma + c.calificacion.estrellas, 0) / calificaciones.length
     : 0;
   return {
-    empleados: empleados.length,
-    clientes: clientes.length,
     calificaciones: calificaciones.length,
     promedio,
     reportesAbiertos: reportes.filter((r) => r.estado === 'abierto').length,
@@ -44,22 +40,6 @@ export default function Mas({ usuario, navegarA, cerrarSesion }) {
   const { datos } = useDatos(contarPersonas);
 
   const opciones = [
-    {
-      titulo: 'Empleados',
-      subtitulo: `${datos?.empleados ?? '…'} empleados activos`,
-      icono: 'people-outline',
-      colorFondo: '#ede9fe',
-      color: '#7c3aed',
-      alPresionar: () => navegarA('adminEmpleados'),
-    },
-    {
-      titulo: 'Clientes',
-      subtitulo: `${datos?.clientes ?? '…'} clientes registrados`,
-      icono: 'person-outline',
-      colorFondo: '#fce7f3',
-      color: '#db2777',
-      alPresionar: () => navegarA('adminClientes'),
-    },
     {
       titulo: 'Calificaciones',
       subtitulo: !datos
@@ -90,6 +70,35 @@ export default function Mas({ usuario, navegarA, cerrarSesion }) {
       alPresionar: () => navegarA('adminReportes'),
     },
     {
+      titulo: 'Estadísticas',
+      subtitulo: 'Ingresos, servicios y horas pico',
+      icono: 'bar-chart-outline',
+      colorFondo: '#e0e7ff',
+      color: '#4338ca',
+      alPresionar: () => navegarA('adminEstadisticas'),
+    },
+    {
+      titulo: 'Exportar a Excel',
+      subtitulo: 'Resumen, hechos para el cubo OLAP y clientes',
+      // Íconos de Excel y PDF (de la familia MaterialCommunityIcons).
+      familiaIcono: MaterialCommunityIcons,
+      icono: 'microsoft-excel',
+      colorFondo: '#dcfce7',
+      color: '#16a34a',
+      iconoDerecha: 'download-outline',
+      alPresionar: descargarExcel,
+    },
+    {
+      titulo: 'Reporte PDF',
+      subtitulo: 'Reporte del negocio para imprimir',
+      familiaIcono: MaterialCommunityIcons,
+      icono: 'file-pdf-box',
+      colorFondo: '#fee2e2',
+      color: '#dc2626',
+      iconoDerecha: 'download-outline',
+      alPresionar: descargarPdf,
+    },
+    {
       titulo: 'Mi perfil',
       subtitulo: usuario.perfil.nombre,
       icono: 'settings-outline',
@@ -103,10 +112,12 @@ export default function Mas({ usuario, navegarA, cerrarSesion }) {
     <ScrollView style={{ flex: 1, backgroundColor: colores.fondo }}>
       <Encabezado titulo="Más" />
       <View style={estilos.seccion}>
-        {opciones.map((o) => (
+        {opciones.map((o) => {
+          const Icono = o.familiaIcono ?? Ionicons;
+          return (
           <Pressable key={o.titulo} style={estilos.fila} onPress={o.alPresionar}>
             <View style={[estilos.icono, { backgroundColor: o.colorFondo }]}>
-              <Ionicons name={o.icono} size={20} color={o.color} />
+              <Icono name={o.icono} size={20} color={o.color} />
             </View>
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={estilos.titulo}>{o.titulo}</Text>
@@ -118,9 +129,10 @@ export default function Mas({ usuario, navegarA, cerrarSesion }) {
                 <Text style={estilos.textoGlobo}>{o.pendientes}</Text>
               </View>
             ) : null}
-            <Ionicons name="chevron-forward" size={20} color={colores.textoSuave} />
+            <Ionicons name={o.iconoDerecha ?? 'chevron-forward'} size={20} color={colores.textoSuave} />
           </Pressable>
-        ))}
+          );
+        })}
 
         <Pressable style={[estilos.fila, estilos.filaSalir]} onPress={cerrarSesion}>
           <View style={[estilos.icono, { backgroundColor: '#fee2e2' }]}>

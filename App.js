@@ -34,6 +34,7 @@ import RecuperarContrasena from './pantallas/RecuperarContrasena';
 import ReportarProblema from './pantallas/ReportarProblema';
 import Reportes from './pantallas/Reportes';
 import Promociones from './pantallas/Promociones';
+import Estadisticas from './pantallas/Estadisticas';
 
 import InicioCliente from './pantallas/InicioCliente';
 import MisCitas from './pantallas/MisCitas';
@@ -220,6 +221,8 @@ export default function App() {
         return <Promociones {...propsComunes} />;
       case 'adminReportes':
         return <Reportes {...propsComunes} />;
+      case 'adminEstadisticas':
+        return <Estadisticas {...propsComunes} />;
 
       default:
         return <IniciarSesion iniciarSesion={iniciarSesion} navegarA={navegarA} />;
