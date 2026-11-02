@@ -24,7 +24,8 @@ App móvil para el autolavado **"Divino Niño"**: digitaliza la gestión de cita
 ## Stack técnico
 - Frontend: **React Native con Expo** (se prueba también en web con `localhost:8081`).
 - Backend: **Node.js + Express** (API REST).
-- Base de datos NoSQL en la nube. **Ojo:** la BOA y el esquema documental están escritos para **MongoDB**, pero el usuario indicó después que ya **no usan MongoDB y migraron a Firebase**. Verificar en el código cuál está en uso antes de asumir nada.
+- Base de datos NoSQL en la nube: **Firebase** (Firestore + Authentication). El diseño empezó con MongoDB; la BOA, el ensayo y la presentación ya se actualizaron a Firebase. Los identificadores son String (id del documento), ya no ObjectId.
+- Credenciales de Firebase en `.env` (variables `EXPO_PUBLIC_FIREBASE_*`, ignorado por git). Backend en Render: `https://backend-grupal2026.onrender.com` (estadísticas y reportes).
 - Control de versiones: Git y GitHub.
 
 ## Modelo de datos (esquema documental original)
@@ -46,12 +47,7 @@ Desde oct 2026 el login usa Firebase Authentication: se entra con correo o telé
 ## Historias de usuario (17) y estado
 HF01 iniciar sesión con teléfono · HF02 recuperar contraseña · HF03 agendar cita · HF04 registrar datos del cliente y vehículo · HF05 actualizar datos · HF06 ver catálogo y precios · HF07 servicio favorito · HF08 reagendar cita · HF09 valorar servicio · HF10 ver promociones · HF11 reportar problema · HF12 notificar estado del servicio · HF13 buscar y filtrar · HF14 historial de servicios · HF15 CRUD de administrador · HF16 cálculo del servicio según vehículo y extras · HF17 CRUD de empleados.
 
-Avance en Taiga: Sprint 1 100 % (260/260) · Sprint 2 76 % (134/176) · Sprint 3 71 % (110/156) · Sprint 4 22 % (30/138) · Sprint 5 30 % (33/111, corte al 5 oct 2026; el sprint terminaba el 19 oct).
-
-Diferencias conocidas entre Taiga y la app real (revisar antes de dar algo por hecho):
-- Taiga marca como hecho "Favoritos" y "Actualizar datos", pero la app no tiene esa interfaz.
-- "Reagendar" es solo un botón o marcador de posición.
-- No existen Notificaciones, Promociones, Valorar servicio ni Reportar problema.
+Estado: según el equipo (1 nov 2026), **los 5 sprints y las 17 historias están terminados**. Las estadísticas del panel de administrador ya están en la app (commit "Estadisticas, descarga de Excel y PDF...").
 
 ## Pantallas y roles en la app
 Se capturaron y documentaron las pantallas de cliente, empleado y administrador en el "Entregable funcional" ordenado por sprint.
@@ -66,8 +62,14 @@ Se capturaron y documentaron las pantallas de cliente, empleado y administrador 
 ## Presupuesto
 C$ 36,624 (cambio oficial BCN: C$ 36.6243 por US$ 1), aproximadamente US$ 1,000. Los montos se trabajan en córdobas.
 
+## Trabajos relacionados (fuera de este repositorio)
+- **Dashboard dimensional con IA** (curso de Bases de Datos No Relacionales, ejemplo de Ventas de Pentaho): carpeta `Documents\dashboard_dimensional_ia\` con `dashboard_dimensional_ia.html` (Groq, `openai/gpt-oss-120b`), la copia con OpenAI, `datos.js` y `LEEME.txt`. La clave de Groq es de cada uno y nunca se sube a GitHub.
+- **Cubo OLAP de citas del autolavado** (curso de bases analíticas): carpeta `Documents\cubo_olap_divino_nino\` con 1000 citas (18 reales de Firebase + 982 simuladas con los clientes, empleados y servicios existentes; columna `origen`), dimensiones, hechos, cubo y el dashboard adaptado (`dashboard/dashboard_divino_nino.html`, Groq). Las simuladas se cargan o borran en Firebase con `scripts/citas_simuladas.mjs` (cuenta de admin; marcadas con `simulado: true`, id `simulada_sim0001`...).
+- **Cubo OLAP de actas de calificaciones** en Pentaho (Spoon 9.4): su contexto completo está en `CUBO_OLAP_PROYECTO_CLAUDE.md` del equipo.
+
 ## Pendientes y cosas por vigilar
-- Confirmar si la base de datos actual es Firebase o MongoDB y alinear el código, la BOA y las explicaciones.
+- Revisión de la app móvil: miércoles 4 de noviembre de 2026.
+- Entrega final de documentos: 1–3 nov 2026 (la portada de la BOA ya dice "Noviembre, 2026").
 - Seis citas del apartado 1.2 de la BOA no tienen referencia en la lista bibliográfica.
 - Inconsistencias en la BOA: fechas del Sprint 2 en HF16 e importancias de HF16/HF17 que no coinciden entre tablas.
-- Antes de la revisión de la app (4 nov): cerrar las historias que Taiga da por hechas y la app no tiene.
+- Confirmar en los documentos que se usa Firestore (no Realtime Database) y citarlo así.
