@@ -43,3 +43,6 @@ yarn-error.*
 
 # configuracion local de Claude Code
 .claude/
+
+# pruebas locales (no se suben)
+pruebas/
